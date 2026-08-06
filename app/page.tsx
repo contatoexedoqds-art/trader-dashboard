@@ -7,8 +7,15 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+interface Workspace {
+  id: string
+  name: string
+  initial_capital: number
+}
+
 interface Trade {
-  id?: string
+  id: string
+  workspace_id: string
   asset: string
   direction: string
   entry_price: number
@@ -32,9 +39,16 @@ export default function Home() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [authError, setAuthError] = useState('')
 
-  // Dashboard States
+  // Workspaces States
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('ALL') // 'ALL' = Geral
+  const [newWorkspaceName, setNewWorkspaceName] = useState('')
+  const [showCreateWsModal, setShowCreateWsModal] = useState(false)
+
+  // Dashboard & Trades States
   const [trades, setTrades] = useState<Trade[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
+  const [editingTradeId, setEditingTradeId] = useState<string | null>(null)
 
   // Form Trades
   const [asset, setAsset] = useState('NASDAQ')
@@ -45,6 +59,7 @@ export default function Home() {
   const [pnl, setPnl] = useState('')
   const [rMultiple, setRMultiple] = useState('')
   const [notes, setNotes] = useState('')
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -62,9 +77,36 @@ export default function Home() {
 
   useEffect(() => {
     if (session) {
-      fetchTrades()
+      fetchWorkspacesAndTrades()
     }
   }, [session])
+
+  async function fetchWorkspacesAndTrades() {
+    setLoadingTrades(true)
+    // 1. Buscar Workspaces
+    const { data: wsData } = await supabase
+      .from('workspaces')
+      .select('*')
+      .order('created_at', { ascending: true })
+
+    if (wsData) {
+      setWorkspaces(wsData)
+      if (wsData.length > 0 && !targetWorkspaceId) {
+        setTargetWorkspaceId(wsData[0].id)
+      }
+    }
+
+    // 2. Buscar Trades
+    const { data: tradesData } = await supabase
+      .from('trades')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (tradesData) {
+      setTrades(tradesData)
+    }
+    setLoadingTrades(false)
+  }
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault()
@@ -80,19 +122,52 @@ export default function Home() {
     }
   }
 
-  async function fetchTrades() {
-    setLoadingTrades(true)
+  // --- Gerenciamento de Workspaces ---
+  async function handleCreateWorkspace(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newWorkspaceName.trim() || !session?.user) return
+
     const { data, error } = await supabase
-      .from('trades')
-      .select('*')
-      .order('created_at', { ascending: false })
+      .from('workspaces')
+      .insert([{ name: newWorkspaceName.trim(), user_id: session.user.id }])
+      .select()
 
     if (!error && data) {
-      setTrades(data)
+      setWorkspaces([...workspaces, data[0]])
+      setSelectedWorkspaceId(data[0].id)
+      setTargetWorkspaceId(data[0].id)
+      setNewWorkspaceName('')
+      setShowCreateWsModal(false)
+    } else {
+      alert('Erro ao criar workspace: ' + error?.message)
     }
-    setLoadingTrades(false)
   }
 
+  async function handleDeleteWorkspace() {
+    if (selectedWorkspaceId === 'ALL') return
+    const currentWs = workspaces.find((w) => w.id === selectedWorkspaceId)
+    if (!currentWs) return
+
+    if (
+      confirm(
+        `Tem certeza que deseja apagar o workspace "${currentWs.name}"? Todas as operações vinculadas a ele serão excluídas permanente.`
+      )
+    ) {
+      const { error } = await supabase.from('workspaces').delete().eq('id', selectedWorkspaceId)
+
+      if (!error) {
+        const updatedWs = workspaces.filter((w) => w.id !== selectedWorkspaceId)
+        setWorkspaces(updatedWs)
+        setTrades(trades.filter((t) => t.workspace_id !== selectedWorkspaceId))
+        setSelectedWorkspaceId('ALL')
+        if (updatedWs.length > 0) setTargetWorkspaceId(updatedWs[0].id)
+      } else {
+        alert('Erro ao apagar workspace: ' + error.message)
+      }
+    }
+  }
+
+  // --- Gerenciamento de Trades ---
   async function handleSubmitTrade(e: React.FormEvent) {
     e.preventDefault()
     if (!session?.user) return
@@ -103,29 +178,29 @@ export default function Home() {
     if (pnlVal > 0) result = 'WIN'
     if (pnlVal < 0) result = 'LOSS'
 
-    let { data: wsData } = await supabase
-      .from('workspaces')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .limit(1)
+    // Definir em qual workspace salvar
+    let activeWsId = targetWorkspaceId
+    if (!activeWsId && selectedWorkspaceId !== 'ALL') activeWsId = selectedWorkspaceId
 
-    let wsId = wsData?.[0]?.id
+    if (!activeWsId && workspaces.length > 0) activeWsId = workspaces[0].id
 
-    if (!wsId) {
+    // Se ainda não tiver workspace, cria o padrão
+    if (!activeWsId) {
       const { data: newWs, error: wsError } = await supabase
         .from('workspaces')
-        .insert([{ name: 'Workspace Principal', initial_capital: 5000, user_id: session.user.id }])
+        .insert([{ name: 'Conta Principal', initial_capital: 5000, user_id: session.user.id }])
         .select()
 
       if (wsError) {
         alert('Erro ao criar workspace: ' + wsError.message)
         return
       }
-      wsId = newWs?.[0]?.id
+      activeWsId = newWs[0].id
+      setWorkspaces([newWs[0]])
     }
 
-    const newTrade = {
-      workspace_id: wsId,
+    const tradePayload = {
+      workspace_id: activeWsId,
       user_id: session.user.id,
       asset,
       direction,
@@ -138,19 +213,90 @@ export default function Home() {
       notes,
     }
 
-    const { error } = await supabase.from('trades').insert([newTrade])
+    if (editingTradeId) {
+      // Atualizar Trade Existente
+      const { error } = await supabase.from('trades').update(tradePayload).eq('id', editingTradeId)
 
-    if (!error) {
-      setEntryPrice('')
-      setStopLoss('')
-      setTakeProfit('')
-      setPnl('')
-      setRMultiple('')
-      setNotes('')
-      fetchTrades()
+      if (!error) {
+        resetForm()
+        fetchWorkspacesAndTrades()
+      } else {
+        alert('Erro ao atualizar trade: ' + error.message)
+      }
     } else {
-      alert('Erro ao salvar trade: ' + error.message)
+      // Criar Novo Trade
+      const { error } = await supabase.from('trades').insert([tradePayload])
+
+      if (!error) {
+        resetForm()
+        fetchWorkspacesAndTrades()
+      } else {
+        alert('Erro ao salvar trade: ' + error.message)
+      }
     }
+  }
+
+  function handleEditTrade(trade: Trade) {
+    setEditingTradeId(trade.id)
+    setAsset(trade.asset)
+    setDirection(trade.direction)
+    setEntryPrice(trade.entry_price.toString())
+    setStopLoss(trade.stop_loss.toString())
+    setTakeProfit(trade.take_profit.toString())
+    setPnl(trade.pnl.toString())
+    setRMultiple(trade.r_multiple.toString())
+    setNotes(trade.notes || '')
+    setTargetWorkspaceId(trade.workspace_id)
+  }
+
+  async function handleDeleteTrade(id: string) {
+    if (confirm('Deseja apagar esta operação?')) {
+      const { error } = await supabase.from('trades').delete().eq('id', id)
+
+      if (!error) {
+        setTrades(trades.filter((t) => t.id !== id))
+      } else {
+        alert('Erro ao apagar trade: ' + error.message)
+      }
+    }
+  }
+
+  async function handleClearAllTrades() {
+    const isAll = selectedWorkspaceId === 'ALL'
+    const msg = isAll
+      ? 'Tem certeza que deseja apagar TODAS as operações de TODOS os workspaces?'
+      : 'Tem certeza que deseja apagar TODAS as operações deste workspace?'
+
+    if (confirm(msg)) {
+      let query = supabase.from('trades').delete()
+      if (!isAll) {
+        query = query.eq('workspace_id', selectedWorkspaceId)
+      } else {
+        query = query.eq('user_id', session.user.id)
+      }
+
+      const { error } = await query
+
+      if (!error) {
+        if (isAll) {
+          setTrades([])
+        } else {
+          setTrades(trades.filter((t) => t.workspace_id !== selectedWorkspaceId))
+        }
+      } else {
+        alert('Erro ao limpar operações: ' + error.message)
+      }
+    }
+  }
+
+  function resetForm() {
+    setEditingTradeId(null)
+    setEntryPrice('')
+    setStopLoss('')
+    setTakeProfit('')
+    setPnl('')
+    setRMultiple('')
+    setNotes('')
   }
 
   if (loadingSession) {
@@ -161,7 +307,7 @@ export default function Home() {
     )
   }
 
-  // Tela de Login / Cadastro por E-mail
+  // --- Tela de Login / Cadastro ---
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -209,7 +355,6 @@ export default function Home() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
-                  title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
                 >
                   {showPassword ? '🙈' : '👁️'}
                 </button>
@@ -240,16 +385,22 @@ export default function Home() {
     )
   }
 
-  // Estatísticas Dinâmicas
-  const totalTrades = trades.length
-  const totalPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0)
-  const totalWins = trades.filter((t) => t.result_type === 'WIN').length
+  // --- Filtragem dos Trades pelo Workspace Selecionado ---
+  const filteredTrades =
+    selectedWorkspaceId === 'ALL'
+      ? trades
+      : trades.filter((t) => t.workspace_id === selectedWorkspaceId)
+
+  // --- Estatísticas Dinâmicas ---
+  const totalTrades = filteredTrades.length
+  const totalPnl = filteredTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+  const totalWins = filteredTrades.filter((t) => t.result_type === 'WIN').length
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0'
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
-      {/* Header */}
-      <header className="max-w-7xl mx-auto flex justify-between items-center pb-6 border-b border-slate-800">
+      {/* Header com Filtro de Workspaces */}
+      <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-4 pb-6 border-b border-slate-800">
         <div>
           <h1 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
             📊 DASHBOARD TRADER
@@ -258,13 +409,88 @@ export default function Home() {
             Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
           </p>
         </div>
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="text-xs bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-semibold px-4 py-2 rounded-lg transition"
-        >
-          Sair
-        </button>
+
+        {/* Barra de Filtro e Ações de Workspace */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <span className="text-xs text-slate-400 px-2 font-medium">Workspace:</span>
+            <select
+              value={selectedWorkspaceId}
+              onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+              className="bg-slate-950 text-white text-xs border border-slate-800 rounded-md p-1.5 focus:outline-none focus:border-emerald-500 font-semibold"
+            >
+              <option value="ALL">🌐 Geral (Estatística Global)</option>
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  📁 {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setShowCreateWsModal(true)}
+            className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-2 rounded-lg transition"
+          >
+            + Criar Conta
+          </button>
+
+          {selectedWorkspaceId !== 'ALL' && (
+            <button
+              onClick={handleDeleteWorkspace}
+              className="text-xs bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 font-semibold px-3 py-2 rounded-lg transition"
+              title="Apagar Workspace Atual"
+            >
+              🗑️ Apagar Workspace
+            </button>
+          )}
+
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="text-xs bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-semibold px-4 py-2 rounded-lg transition ml-auto md:ml-2"
+          >
+            Sair
+          </button>
+        </div>
       </header>
+
+      {/* Modal Criar Novo Workspace */}
+      {showCreateWsModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <h3 className="text-lg font-bold text-white">Criar Novo Sub-Workspace</h3>
+            <form onSubmit={handleCreateWorkspace} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">Nome da Conta / Mesa</label>
+                <input
+                  type="text"
+                  value={newWorkspaceName}
+                  onChange={(e) => setNewWorkspaceName(e.target.value)}
+                  placeholder="Ex: Mesa FTMO 50k, Conta Pessoal..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateWsModal(false)}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="text-xs bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-lg"
+                >
+                  Criar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto mt-8 space-y-8">
         {/* Cards Estatísticos */}
@@ -289,18 +515,49 @@ export default function Home() {
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
             <span className="text-xs text-slate-400 font-medium uppercase">Expectativa R</span>
             <p className="text-2xl font-bold text-purple-400 mt-1">
-              {totalTrades > 0 ? (trades.reduce((a, b) => a + (b.r_multiple || 0), 0) / totalTrades).toFixed(2) : '0'}R
+              {totalTrades > 0
+                ? (
+                    filteredTrades.reduce((a, b) => a + (b.r_multiple || 0), 0) / totalTrades
+                  ).toFixed(2)
+                : '0'}
+              R
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Form de Cadastro */}
+          {/* Form de Cadastro / Edição */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4 h-fit">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              ➕ Novo Trade
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                {editingTradeId ? '✏️ Editar Trade' : '➕ Novo Trade'}
+              </h2>
+              {editingTradeId && (
+                <button
+                  onClick={resetForm}
+                  className="text-xs text-slate-400 hover:text-rose-400 transition"
+                >
+                  Cancelar Edição
+                </button>
+              )}
+            </div>
+
             <form onSubmit={handleSubmitTrade} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">Destinar à Conta / Workspace</label>
+                <select
+                  value={targetWorkspaceId}
+                  onChange={(e) => setTargetWorkspaceId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                >
+                  {workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400">Ativo</label>
@@ -401,23 +658,36 @@ export default function Home() {
                 type="submit"
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm"
               >
-                Salvar Operação
+                {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
               </button>
             </form>
           </div>
 
           {/* Tabela de Operações */}
           <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center justify-between">
-              <span>📋 Diário de Operações</span>
-              <span className="text-xs text-slate-500 font-normal">{trades.length} registrados</span>
-            </h2>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>📋 Diário de Operações</span>
+                <span className="text-xs text-slate-500 font-normal">
+                  ({filteredTrades.length} registrados)
+                </span>
+              </h2>
+
+              {filteredTrades.length > 0 && (
+                <button
+                  onClick={handleClearAllTrades}
+                  className="text-xs bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 px-3 py-1.5 rounded-lg transition"
+                >
+                  🧹 Limpar Todas as Operações
+                </button>
+              )}
+            </div>
 
             {loadingTrades ? (
               <p className="text-sm text-slate-500 py-8 text-center">Carregando diário...</p>
-            ) : trades.length === 0 ? (
+            ) : filteredTrades.length === 0 ? (
               <p className="text-sm text-slate-500 py-8 text-center">
-                Nenhum trade registrado ainda. Cadastre sua primeira operação ao lado!
+                Nenhum trade registrado neste workspace. Cadastre sua primeira operação ao lado!
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -429,10 +699,11 @@ export default function Home() {
                       <th className="p-3">Resultado</th>
                       <th className="p-3">Retorno R</th>
                       <th className="p-3">Notas</th>
+                      <th className="p-3 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {trades.map((t) => (
+                    {filteredTrades.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-950/50 transition">
                         <td className="p-3 font-semibold text-white">{t.asset}</td>
                         <td className="p-3">
@@ -464,6 +735,22 @@ export default function Home() {
                         </td>
                         <td className="p-3 text-xs text-slate-400 max-w-xs truncate">
                           {t.notes || '-'}
+                        </td>
+                        <td className="p-3 text-right space-x-2">
+                          <button
+                            onClick={() => handleEditTrade(t)}
+                            className="text-xs text-slate-400 hover:text-emerald-400 transition"
+                            title="Editar"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTrade(t.id)}
+                            className="text-xs text-slate-400 hover:text-rose-400 transition"
+                            title="Apagar"
+                          >
+                            🗑️
+                          </button>
                         </td>
                       </tr>
                     ))}
