@@ -13,11 +13,17 @@ interface Workspace {
   initial_capital: number
 }
 
+interface Strategy {
+  id: string
+  name: string
+}
+
 interface Trade {
   id: string
   workspace_id: string
   asset: string
   direction: string
+  strategy_name?: string
   entry_price: number
   stop_loss: number
   take_profit: number
@@ -45,6 +51,11 @@ export default function Home() {
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [showCreateWsModal, setShowCreateWsModal] = useState(false)
 
+  // Strategies States
+  const [strategies, setStrategies] = useState<Strategy[]>([])
+  const [newStrategyName, setNewStrategyName] = useState('')
+  const [showCreateStratModal, setShowCreateStratModal] = useState(false)
+
   // Dashboard & Trades States
   const [trades, setTrades] = useState<Trade[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
@@ -53,6 +64,7 @@ export default function Home() {
   // Form Trades
   const [asset, setAsset] = useState('NASDAQ')
   const [direction, setDirection] = useState('BUY')
+  const [strategyName, setStrategyName] = useState('')
   const [entryPrice, setEntryPrice] = useState('')
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')
@@ -77,13 +89,14 @@ export default function Home() {
 
   useEffect(() => {
     if (session) {
-      fetchWorkspacesAndTrades()
+      fetchData()
     }
   }, [session])
 
-  async function fetchWorkspacesAndTrades() {
+  async function fetchData() {
     setLoadingTrades(true)
-    // 1. Buscar Workspaces
+    
+    // 1. Workspaces
     const { data: wsData } = await supabase
       .from('workspaces')
       .select('*')
@@ -96,7 +109,20 @@ export default function Home() {
       }
     }
 
-    // 2. Buscar Trades
+    // 2. Estratégias
+    const { data: stratData } = await supabase
+      .from('strategies')
+      .select('*')
+      .order('name', { ascending: true })
+
+    if (stratData) {
+      setStrategies(stratData)
+      if (stratData.length > 0 && !strategyName) {
+        setStrategyName(stratData[0].name)
+      }
+    }
+
+    // 3. Trades
     const { data: tradesData } = await supabase
       .from('trades')
       .select('*')
@@ -167,6 +193,26 @@ export default function Home() {
     }
   }
 
+  // --- Gerenciamento de Estratégias ---
+  async function handleCreateStrategy(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newStrategyName.trim() || !session?.user) return
+
+    const { data, error } = await supabase
+      .from('strategies')
+      .insert([{ name: newStrategyName.trim(), user_id: session.user.id }])
+      .select()
+
+    if (!error && data) {
+      setStrategies([...strategies, data[0]])
+      setStrategyName(data[0].name)
+      setNewStrategyName('')
+      setShowCreateStratModal(false)
+    } else {
+      alert('Erro ao criar estratégia: ' + error?.message)
+    }
+  }
+
   // --- Gerenciamento de Trades ---
   async function handleSubmitTrade(e: React.FormEvent) {
     e.preventDefault()
@@ -178,13 +224,10 @@ export default function Home() {
     if (pnlVal > 0) result = 'WIN'
     if (pnlVal < 0) result = 'LOSS'
 
-    // Definir em qual workspace salvar
     let activeWsId = targetWorkspaceId
     if (!activeWsId && selectedWorkspaceId !== 'ALL') activeWsId = selectedWorkspaceId
-
     if (!activeWsId && workspaces.length > 0) activeWsId = workspaces[0].id
 
-    // Se ainda não tiver workspace, cria o padrão
     if (!activeWsId) {
       const { data: newWs, error: wsError } = await supabase
         .from('workspaces')
@@ -204,6 +247,7 @@ export default function Home() {
       user_id: session.user.id,
       asset,
       direction,
+      strategy_name: strategyName || 'Sem Estratégia',
       entry_price: parseFloat(entryPrice) || 0,
       stop_loss: parseFloat(stopLoss) || 0,
       take_profit: parseFloat(takeProfit) || 0,
@@ -214,22 +258,20 @@ export default function Home() {
     }
 
     if (editingTradeId) {
-      // Atualizar Trade Existente
       const { error } = await supabase.from('trades').update(tradePayload).eq('id', editingTradeId)
 
       if (!error) {
         resetForm()
-        fetchWorkspacesAndTrades()
+        fetchData()
       } else {
         alert('Erro ao atualizar trade: ' + error.message)
       }
     } else {
-      // Criar Novo Trade
       const { error } = await supabase.from('trades').insert([tradePayload])
 
       if (!error) {
         resetForm()
-        fetchWorkspacesAndTrades()
+        fetchData()
       } else {
         alert('Erro ao salvar trade: ' + error.message)
       }
@@ -240,6 +282,7 @@ export default function Home() {
     setEditingTradeId(trade.id)
     setAsset(trade.asset)
     setDirection(trade.direction)
+    setStrategyName(trade.strategy_name || '')
     setEntryPrice(trade.entry_price.toString())
     setStopLoss(trade.stop_loss.toString())
     setTakeProfit(trade.take_profit.toString())
@@ -307,7 +350,6 @@ export default function Home() {
     )
   }
 
-  // --- Tela de Login / Cadastro ---
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -397,9 +439,24 @@ export default function Home() {
   const totalWins = filteredTrades.filter((t) => t.result_type === 'WIN').length
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0'
 
+  // --- Análise de Eficiência por Estratégia ---
+  const strategyStats = Object.values(
+    filteredTrades.reduce((acc: any, trade) => {
+      const strat = trade.strategy_name || 'Outros / Sem Categoria'
+      if (!acc[strat]) {
+        acc[strat] = { name: strat, total: 0, wins: 0, pnl: 0, totalR: 0 }
+      }
+      acc[strat].total += 1
+      if (trade.result_type === 'WIN') acc[strat].wins += 1
+      acc[strat].pnl += trade.pnl || 0
+      acc[strat].totalR += trade.r_multiple || 0
+      return acc
+    }, {})
+  ).sort((a: any, b: any) => b.pnl - a.pnl)
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
-      {/* Header com Filtro de Workspaces */}
+      {/* Header */}
       <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-4 pb-6 border-b border-slate-800">
         <div>
           <h1 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
@@ -410,7 +467,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Barra de Filtro e Ações de Workspace */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <span className="text-xs text-slate-400 px-2 font-medium">Workspace:</span>
@@ -492,8 +548,46 @@ export default function Home() {
         </div>
       )}
 
+      {/* Modal Criar Nova Estratégia */}
+      {showCreateStratModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <h3 className="text-lg font-bold text-white">Criar Categoria de Estratégia</h3>
+            <form onSubmit={handleCreateStrategy} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">Nome do Setup / Modelo</label>
+                <input
+                  type="text"
+                  value={newStrategyName}
+                  onChange={(e) => setNewStrategyName(e.target.value)}
+                  placeholder="Ex: FVG + OB, Liquidity Sweep, Order Flow..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateStratModal(false)}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="text-xs bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-lg"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto mt-8 space-y-8">
-        {/* Cards Estatísticos */}
+        {/* Cards Estatísticos Globais do Workspace */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
             <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
@@ -503,7 +597,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs text-slate-400 font-medium uppercase">Win Rate</span>
+            <span className="text-xs text-slate-400 font-medium uppercase">Win Rate Global</span>
             <p className="text-2xl font-bold text-blue-400 mt-1">{winRate}%</p>
           </div>
 
@@ -525,6 +619,58 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Métrica de Eficiência das Estratégias */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              🎯 Eficiência por Estratégia / Setup
+            </h2>
+            <button
+              onClick={() => setShowCreateStratModal(true)}
+              className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg transition"
+            >
+              + Nova Estratégia
+            </button>
+          </div>
+
+          {strategyStats.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">
+              Nenhuma operação cadastrada com estratégia para gerar estatísticas neste workspace.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {strategyStats.map((st: any) => {
+                const stratWinRate = ((st.wins / st.total) * 100).toFixed(1)
+                return (
+                  <div key={st.name} className="bg-slate-950 border border-slate-800/80 p-4 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                      <span className="font-bold text-slate-100 text-sm">{st.name}</span>
+                      <span className="text-xs text-slate-400">{st.total} trades</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Win Rate</span>
+                        <span className="text-sm font-bold text-blue-400">{stratWinRate}%</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Lucro ($)</span>
+                        <span className={`text-sm font-bold ${st.pnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                          ${st.pnl.toFixed(2)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Retorno R</span>
+                        <span className="text-sm font-bold text-purple-400">{st.totalR.toFixed(1)}R</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Form de Cadastro / Edição */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4 h-fit">
@@ -537,7 +683,7 @@ export default function Home() {
                   onClick={resetForm}
                   className="text-xs text-slate-400 hover:text-rose-400 transition"
                 >
-                  Cancelar Edição
+                  Cancelar
                 </button>
               )}
             </div>
@@ -553,6 +699,31 @@ export default function Home() {
                   {workspaces.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-slate-400">Estratégia / Setup</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateStratModal(true)}
+                    className="text-[11px] text-emerald-400 hover:underline"
+                  >
+                    + Adicionar
+                  </button>
+                </div>
+                <select
+                  value={strategyName}
+                  onChange={(e) => setStrategyName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                >
+                  <option value="Sem Estratégia">Sem Estratégia Especificada</option>
+                  {strategies.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      🎯 {s.name}
                     </option>
                   ))}
                 </select>
@@ -695,6 +866,7 @@ export default function Home() {
                   <thead className="text-xs text-slate-500 uppercase bg-slate-950 border-b border-slate-800">
                     <tr>
                       <th className="p-3">Ativo</th>
+                      <th className="p-3">Estratégia</th>
                       <th className="p-3">Tipo</th>
                       <th className="p-3">Resultado</th>
                       <th className="p-3">Retorno R</th>
@@ -706,6 +878,11 @@ export default function Home() {
                     {filteredTrades.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-950/50 transition">
                         <td className="p-3 font-semibold text-white">{t.asset}</td>
+                        <td className="p-3">
+                          <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-medium">
+                            {t.strategy_name || 'Sem Estratégia'}
+                          </span>
+                        </td>
                         <td className="p-3">
                           <span
                             className={`text-xs px-2 py-0.5 rounded font-bold ${
