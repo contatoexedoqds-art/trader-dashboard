@@ -30,6 +30,7 @@ interface Trade {
   pnl: number
   r_multiple: number
   result_type: string
+  chart_url?: string
   notes?: string
   created_at?: string
 }
@@ -47,7 +48,7 @@ export default function Home() {
 
   // Workspaces States
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('ALL') // 'ALL' = Geral
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('ALL')
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [showCreateWsModal, setShowCreateWsModal] = useState(false)
 
@@ -70,6 +71,7 @@ export default function Home() {
   const [takeProfit, setTakeProfit] = useState('')
   const [pnl, setPnl] = useState('')
   const [rMultiple, setRMultiple] = useState('')
+  const [chartUrl, setChartUrl] = useState('')
   const [notes, setNotes] = useState('')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
@@ -254,6 +256,7 @@ export default function Home() {
       pnl: pnlVal,
       r_multiple: rVal,
       result_type: result,
+      chart_url: chartUrl.trim() || null,
       notes,
     }
 
@@ -288,6 +291,7 @@ export default function Home() {
     setTakeProfit(trade.take_profit.toString())
     setPnl(trade.pnl.toString())
     setRMultiple(trade.r_multiple.toString())
+    setChartUrl(trade.chart_url || '')
     setNotes(trade.notes || '')
     setTargetWorkspaceId(trade.workspace_id)
   }
@@ -339,6 +343,7 @@ export default function Home() {
     setTakeProfit('')
     setPnl('')
     setRMultiple('')
+    setChartUrl('')
     setNotes('')
   }
 
@@ -587,7 +592,7 @@ export default function Home() {
       )}
 
       <main className="max-w-7xl mx-auto mt-8 space-y-8">
-        {/* Cards Estatísticos Globais do Workspace */}
+        {/* Cards Estatísticos Globais */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
             <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
@@ -619,7 +624,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Métrica de Eficiência das Estratégias */}
+        {/* Eficiência por Estratégia */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -816,6 +821,17 @@ export default function Home() {
               </div>
 
               <div>
+                <label className="text-xs text-slate-400">URL do Print / TradingView</label>
+                <input
+                  type="url"
+                  value={chartUrl}
+                  onChange={(e) => setChartUrl(e.target.value)}
+                  placeholder="https://www.tradingview.com/x/..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                />
+              </div>
+
+              <div>
                 <label className="text-xs text-slate-400">Notas / Diário</label>
                 <textarea
                   value={notes}
@@ -870,6 +886,7 @@ export default function Home() {
                       <th className="p-3">Tipo</th>
                       <th className="p-3">Resultado</th>
                       <th className="p-3">Retorno R</th>
+                      <th className="p-3">Gráfico</th>
                       <th className="p-3">Notas</th>
                       <th className="p-3 text-right">Ações</th>
                     </tr>
@@ -909,6 +926,20 @@ export default function Home() {
                         </td>
                         <td className="p-3 font-medium text-slate-300">
                           {t.r_multiple ? `${t.r_multiple}R` : '-'}
+                        </td>
+                        <td className="p-3">
+                          {t.chart_url ? (
+                            <a
+                              href={t.chart_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:underline bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded"
+                            >
+                              🖼️ Ver Print
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-600">-</span>
+                          )}
                         </td>
                         <td className="p-3 text-xs text-slate-400 max-w-xs truncate">
                           {t.notes || '-'}
