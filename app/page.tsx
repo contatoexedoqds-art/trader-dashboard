@@ -22,10 +22,20 @@ interface Trade {
 }
 
 export default function Home() {
-  const [trades, setTrades] = useState<Trade[]>([])
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState<any>(null)
+  const [loadingSession, setLoadingSession] = useState(true)
 
-  // Campos do Formulário
+  // Auth States
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [authError, setAuthError] = useState('')
+
+  // Dashboard States
+  const [trades, setTrades] = useState<Trade[]>([])
+  const [loadingTrades, setLoadingTrades] = useState(false)
+
+  // Form Trades
   const [asset, setAsset] = useState('NASDAQ')
   const [direction, setDirection] = useState('BUY')
   const [entryPrice, setEntryPrice] = useState('')
@@ -35,9 +45,42 @@ export default function Home() {
   const [rMultiple, setRMultiple] = useState('')
   const [notes, setNotes] = useState('')
 
-  // Carregar trades do Supabase
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setLoadingSession(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      setLoadingSession(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (session) {
+      fetchTrades()
+    }
+  }, [session])
+
+  async function handleAuth(e: React.FormEvent) {
+    e.preventDefault()
+    setAuthError('')
+
+    if (isSignUp) {
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) setAuthError(error.message)
+      else alert('Conta criada com sucesso!')
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) setAuthError(error.message)
+    }
+  }
+
   async function fetchTrades() {
-    setLoading(true)
+    setLoadingTrades(true)
     const { data, error } = await supabase
       .from('trades')
       .select('*')
@@ -46,16 +89,12 @@ export default function Home() {
     if (!error && data) {
       setTrades(data)
     }
-    setLoading(false)
+    setLoadingTrades(false)
   }
 
-  useEffect(() => {
-    fetchTrades()
-  }, [])
-
-  // Cadastrar Novo Trade
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmitTrade(e: React.FormEvent) {
     e.preventDefault()
+    if (!session?.user) return
 
     const pnlVal = parseFloat(pnl) || 0
     const rVal = parseFloat(rMultiple) || 0
@@ -63,20 +102,31 @@ export default function Home() {
     if (pnlVal > 0) result = 'WIN'
     if (pnlVal < 0) result = 'LOSS'
 
-    // Como é o teste inicial, inserimos em um workspace padrão
-    const { data: wsData } = await supabase.from('workspaces').select('id').limit(1)
+    // Obter ou criar workspace do usuário autenticado
+    let { data: wsData } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .limit(1)
+
     let wsId = wsData?.[0]?.id
 
     if (!wsId) {
-      const { data: newWs } = await supabase
+      const { data: newWs, error: wsError } = await supabase
         .from('workspaces')
-        .insert([{ name: 'Workspace Principal', initial_capital: 5000, user_id: '00000000-0000-0000-0000-000000000000' }])
+        .insert([{ name: 'Workspace Principal', initial_capital: 5000, user_id: session.user.id }])
         .select()
+
+      if (wsError) {
+        alert('Erro ao criar workspace: ' + wsError.message)
+        return
+      }
       wsId = newWs?.[0]?.id
     }
 
     const newTrade = {
       workspace_id: wsId,
+      user_id: session.user.id,
       asset,
       direction,
       entry_price: parseFloat(entryPrice) || 0,
@@ -91,7 +141,6 @@ export default function Home() {
     const { error } = await supabase.from('trades').insert([newTrade])
 
     if (!error) {
-      // Limpar formulário e recarregar
       setEntryPrice('')
       setStopLoss('')
       setTakeProfit('')
@@ -104,7 +153,84 @@ export default function Home() {
     }
   }
 
-  // Cálculos Estatísticos Dinâmicos
+  if (loadingSession) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-sans">
+        <p className="text-sm text-slate-400">Carregando aplicação...</p>
+      </div>
+    )
+  }
+
+  // Tela de Login / Cadastro
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl space-y-6">
+          <div className="text-center space-y-1">
+            <h1 className="text-2xl font-bold text-emerald-400 flex items-center justify-center gap-2">
+              📊 TRADER DASHBOARD
+            </h1>
+            <p className="text-xs text-slate-400">
+              {isSignUp ? 'Crie sua conta para acessar seu diário' : 'Entre com suas credenciais de acesso'}
+            </p>
+          </div>
+
+          {authError && (
+            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg text-center">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <label className="text-xs text-slate-400">E-mail</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu@email.com"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400">Senha</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm"
+            >
+              {isSignUp ? 'Criar Conta' : 'Entrar no Dashboard'}
+            </button>
+          </form>
+
+          <div className="text-center">
+            <button
+              onClick={() => {
+                setIsSignUp(!isSignUp)
+                setAuthError('')
+              }}
+              className="text-xs text-slate-400 hover:text-emerald-400 transition"
+            >
+              {isSignUp ? 'Já tem uma conta? Faça Login' : 'Não tem conta? Cadastre-se'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Estatísticas Dinâmicas
   const totalTrades = trades.length
   const totalPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0)
   const totalWins = trades.filter((t) => t.result_type === 'WIN').length
@@ -119,12 +245,15 @@ export default function Home() {
             📊 DASHBOARD TRADER UNIVERSAL
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Diário Operacional & Laboratório Estatístico
+            Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
           </p>
         </div>
-        <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg font-semibold">
-          MVP v1.0 • Online
-        </span>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="text-xs bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-semibold px-4 py-2 rounded-lg transition"
+        >
+          Sair
+        </button>
       </header>
 
       <main className="max-w-7xl mx-auto mt-8 space-y-8">
@@ -161,7 +290,7 @@ export default function Home() {
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               ➕ Novo Trade
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmitTrade} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400">Ativo</label>
@@ -274,7 +403,7 @@ export default function Home() {
               <span className="text-xs text-slate-500 font-normal">{trades.length} registrados</span>
             </h2>
 
-            {loading ? (
+            {loadingTrades ? (
               <p className="text-sm text-slate-500 py-8 text-center">Carregando diário...</p>
             ) : trades.length === 0 ? (
               <p className="text-sm text-slate-500 py-8 text-center">
