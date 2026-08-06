@@ -13,14 +13,14 @@ export default function Home() {
   useEffect(() => {
     async function checkConnection() {
       try {
-        const { error } = await supabase.from('workspaces').select('id', { count: 'exact', head: true })
-        if (error && error.code !== 'PGRST116') {
-          setDbStatus('Conectado ao Supabase! (RLS Ativo)')
-        } else {
+        const { data, error } = await supabase.from('connection_test').select('*').limit(1)
+        if (error) {
+          setDbStatus('Erro ao conectar: ' + error.message)
+        } else if (data) {
           setDbStatus('Conectado com sucesso ao Supabase! 🚀')
         }
       } catch (e) {
-        setDbStatus('Erro ao tentar conectar')
+        setDbStatus('Erro na tentativa de conexão')
       }
     }
     checkConnection()
@@ -45,12 +45,12 @@ export default function Home() {
             Dashboard Trader Universal 🚀
           </h2>
           <p className="text-slate-400 max-w-xl mx-auto mb-8 text-sm">
-            Sua plataforma universal para diário operacional, gestão de risco e análise estatística avançada.
+            Sua plataforma universal para diário operational, gestão de risco e análise estatística avançada.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Banco de Dados</p>
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Status do Banco</p>
               <p className="text-xs font-medium text-emerald-400">{dbStatus}</p>
             </div>
 
@@ -60,8 +60,8 @@ export default function Home() {
             </div>
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Status</p>
-              <p className="text-xs font-medium text-purple-400">Pronto para desenvolvimento</p>
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Versão</p>
+              <p className="text-xs font-medium text-purple-400">1.0.0 MVP</p>
             </div>
           </div>
         </div>
