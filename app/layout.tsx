@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Dashboard Trader Universal',
@@ -13,7 +12,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" className="dark">
-      <body className="bg-slate-950 text-slate-100 min-h-screen">
+      <head>
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
+      <body className="bg-slate-950 text-slate-100 min-h-screen font-sans">
         {children}
       </body>
     </html>
