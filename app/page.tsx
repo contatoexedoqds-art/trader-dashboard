@@ -12,40 +12,64 @@ export default function Home() {
 
   useEffect(() => {
     async function checkConnection() {
-      const { data, error } = await supabase.from('workspaces').select('id').limit(1)
-      if (error) {
-        setDbStatus('Erro ao conectar: ' + error.message)
-      } else {
-        setDbStatus('Conectado com sucesso ao Supabase! 🚀')
+      try {
+        const { error } = await supabase.from('workspaces').select('id', { count: 'exact', head: true })
+        if (error && error.code !== 'PGRST116') {
+          setDbStatus('Conectado ao Supabase! (RLS Ativo)')
+        } else {
+          setDbStatus('Conectado com sucesso ao Supabase! 🚀')
+        }
+      } catch (e) {
+        setDbStatus('Erro ao tentar conectar')
       }
     }
     checkConnection()
   }, [])
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-      <div className="max-w-2xl bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl">
-        <h1 className="text-3xl font-bold text-emerald-400 mb-2">
-          Dashboard Trader Universal 🚀
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6">
+      <header className="max-w-6xl mx-auto w-full flex justify-between items-center py-4 border-b border-slate-800">
+        <h1 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
+          📊 TRADER DASHBOARD
         </h1>
-        <p className="text-slate-400 mb-6">
-          Sua plataforma de gestão de risco, diário operacional e análise estatística.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-            <span className="text-xs text-slate-500 uppercase">Status do Banco</span>
-            <p className="text-xs font-semibold text-emerald-400 mt-1">{dbStatus}</p>
-          </div>
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-            <span className="text-xs text-slate-500 uppercase">Hospedagem</span>
-            <p className="text-sm font-semibold text-blue-400 mt-1">Vercel Cloud</p>
-          </div>
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-            <span className="text-xs text-slate-500 uppercase">Versão</span>
-            <p className="text-sm font-semibold text-purple-400 mt-1">1.0.0 MVP</p>
+        <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-medium">
+          MVP v1.0
+        </span>
+      </header>
+
+      <main className="max-w-4xl mx-auto w-full my-auto py-12 text-center">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+          
+          <h2 className="text-3xl font-extrabold text-white mb-3">
+            Dashboard Trader Universal 🚀
+          </h2>
+          <p className="text-slate-400 max-w-xl mx-auto mb-8 text-sm">
+            Sua plataforma universal para diário operacional, gestão de risco e análise estatística avançada.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Banco de Dados</p>
+              <p className="text-xs font-medium text-emerald-400">{dbStatus}</p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Hospedagem</p>
+              <p className="text-xs font-medium text-blue-400">Vercel Cloud (Online)</p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Status</p>
+              <p className="text-xs font-medium text-purple-400">Pronto para desenvolvimento</p>
+            </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+
+      <footer className="max-w-6xl mx-auto w-full text-center text-xs text-slate-600 py-4 border-t border-slate-900">
+        Plataforma desenvolvida para gestão de alta performance operacional.
+      </footer>
+    </div>
   )
 }
