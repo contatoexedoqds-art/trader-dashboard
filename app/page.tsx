@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, Session } from '@supabase/supabase-js'
 import {
   format,
   startOfMonth,
@@ -22,7 +22,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 interface Workspace {
   id: string
   name: string
-  initial_capital: number
+  initial_capital?: number
 }
 
 interface Strategy {
@@ -48,8 +48,16 @@ interface Trade {
   created_at?: string
 }
 
+interface StrategyStat {
+  name: string
+  total: number
+  wins: number
+  pnl: number
+  totalR: number
+}
+
 export default function Home() {
-  const [session, setSession] = useState<any>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loadingSession, setLoadingSession] = useState(true)
 
   // Auth States
@@ -330,6 +338,7 @@ export default function Home() {
   }
 
   async function handleClearAllTrades() {
+    if (!session?.user) return
     const isAll = selectedWorkspaceId === 'ALL'
     const msg = isAll
       ? 'Tem certeza que deseja apagar TODAS as operações de TODOS os workspaces?'
@@ -489,19 +498,21 @@ export default function Home() {
   const monthlyPnl = monthTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
 
   // --- Análise de Eficiência por Estratégia ---
-  const strategyStats = Object.values(
-    filteredTrades.reduce((acc: any, trade) => {
-      const strat = trade.strategy_name || 'Outros / Sem Categoria'
-      if (!acc[strat]) {
-        acc[strat] = { name: strat, total: 0, wins: 0, pnl: 0, totalR: 0 }
-      }
-      acc[strat].total += 1
-      if (trade.result_type === 'WIN') acc[strat].wins += 1
-      acc[strat].pnl += trade.pnl || 0
-      acc[strat].totalR += trade.r_multiple || 0
-      return acc
-    }, {})
-  ).sort((a: any, b: any) => b.pnl - a.pnl)
+  const strategyStatsMap = filteredTrades.reduce((acc: Record<string, StrategyStat>, trade) => {
+    const strat = trade.strategy_name || 'Outros / Sem Categoria'
+    if (!acc[strat]) {
+      acc[strat] = { name: strat, total: 0, wins: 0, pnl: 0, totalR: 0 }
+    }
+    acc[strat].total += 1
+    if (trade.result_type === 'WIN') acc[strat].wins += 1
+    acc[strat].pnl += trade.pnl || 0
+    acc[strat].totalR += trade.r_multiple || 0
+    return acc
+  }, {})
+
+  const strategyStats: StrategyStat[] = Object.values(strategyStatsMap).sort(
+    (a, b) => b.pnl - a.pnl
+  )
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
@@ -512,7 +523,7 @@ export default function Home() {
             📊 DASHBOARD TRADER
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
+            Usuário: <span className="text-slate-200 font-semibold">{session.user?.email}</span>
           </p>
         </div>
 
@@ -581,10 +592,4 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowCreateWsModal(false)}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="text-xs b
+                  className="text-xs bg-slate-800 hover:b
