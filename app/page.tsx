@@ -2,6 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  addMonths,
+  subMonths,
+  getDay,
+  parseISO
+} from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -32,6 +45,7 @@ interface Trade {
   result_type: string
   chart_url?: string
   notes?: string
+  trade_date: string
   created_at?: string
 }
 
@@ -62,6 +76,11 @@ export default function Home() {
   const [loadingTrades, setLoadingTrades] = useState(false)
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null)
 
+  // Calendar & Date Filters
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date())
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
   // Form Trades
   const [asset, setAsset] = useState('NASDAQ')
   const [direction, setDirection] = useState('BUY')
@@ -72,6 +91,7 @@ export default function Home() {
   const [pnl, setPnl] = useState('')
   const [rMultiple, setRMultiple] = useState('')
   const [chartUrl, setChartUrl] = useState('')
+  const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
@@ -97,7 +117,7 @@ export default function Home() {
 
   async function fetchData() {
     setLoadingTrades(true)
-    
+
     // 1. Workspaces
     const { data: wsData } = await supabase
       .from('workspaces')
@@ -128,7 +148,7 @@ export default function Home() {
     const { data: tradesData } = await supabase
       .from('trades')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('trade_date', { ascending: false })
 
     if (tradesData) {
       setTrades(tradesData)
@@ -257,6 +277,7 @@ export default function Home() {
       r_multiple: rVal,
       result_type: result,
       chart_url: chartUrl.trim() || null,
+      trade_date: tradeDate || new Date().toISOString().split('T')[0],
       notes,
     }
 
@@ -292,6 +313,7 @@ export default function Home() {
     setPnl(trade.pnl.toString())
     setRMultiple(trade.r_multiple.toString())
     setChartUrl(trade.chart_url || '')
+    setTradeDate(trade.trade_date || new Date().toISOString().split('T')[0])
     setNotes(trade.notes || '')
     setTargetWorkspaceId(trade.workspace_id)
   }
@@ -345,6 +367,7 @@ export default function Home() {
     setRMultiple('')
     setChartUrl('')
     setNotes('')
+    setTradeDate(new Date().toISOString().split('T')[0])
   }
 
   if (loadingSession) {
@@ -432,17 +455,39 @@ export default function Home() {
     )
   }
 
-  // --- Filtragem dos Trades pelo Workspace Selecionado ---
-  const filteredTrades =
-    selectedWorkspaceId === 'ALL'
-      ? trades
-      : trades.filter((t) => t.workspace_id === selectedWorkspaceId)
+  // --- Filtragem dos Trades pelo Workspace Selecionado e Período de Data ---
+  const filteredTrades = trades.filter((t) => {
+    const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
+    let matchDate = true
+    if (startDate) {
+      matchDate = matchDate && t.trade_date >= startDate
+    }
+    if (endDate) {
+      matchDate = matchDate && t.trade_date <= endDate
+    }
+    return matchWs && matchDate
+  })
 
   // --- Estatísticas Dinâmicas ---
   const totalTrades = filteredTrades.length
   const totalPnl = filteredTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
   const totalWins = filteredTrades.filter((t) => t.result_type === 'WIN').length
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0'
+
+  // --- Lógica do Calendário ---
+  const monthStart = startOfMonth(currentCalendarMonth)
+  const monthEnd = endOfMonth(monthStart)
+  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  const startDayOfWeek = getDay(monthStart)
+
+  const monthTrades = trades.filter((t) => {
+    const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
+    if (!matchWs) return false
+    const d = parseISO(t.trade_date)
+    return isSameMonth(d, currentCalendarMonth)
+  })
+
+  const monthlyPnl = monthTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
 
   // --- Análise de Eficiência por Estratégia ---
   const strategyStats = Object.values(
@@ -592,6 +637,50 @@ export default function Home() {
       )}
 
       <main className="max-w-7xl mx-auto mt-8 space-y-8">
+        {/* Filtro de Período Geral */}
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-white">📅 Filtro de Período:</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              (Aplica no resumo, gráficos e lista)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">De:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">Até:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {(startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setStartDate('')
+                  setEndDate('')
+                }}
+                className="text-xs text-rose-400 hover:underline px-2 py-1"
+              >
+                Limpar Filtro
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Cards Estatísticos Globais */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
@@ -624,6 +713,102 @@ export default function Home() {
           </div>
         </div>
 
+        {/* CALENDÁRIO ESTILO TRADER LEZELLA */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                📆 Calendário de Desempenho
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Visão mensal estilo Trader Lezella com diário de lucros e operações por dia.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                Mês: ${monthlyPnl.toFixed(2)}
+              </span>
+
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                <button
+                  onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ◀
+                </button>
+                <span className="text-xs font-bold text-slate-200 px-2 capitalize">
+                  {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <button
+                  onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ▶
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid do Calendário */}
+          <div className="grid grid-cols-7 gap-1 md:gap-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
+                {day}
+              </div>
+            ))}
+
+            {/* Células vazias para alinhar o primeiro dia do mês */}
+            {Array.from({ length: startDayOfWeek }).map((_, index) => (
+              <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
+            ))}
+
+            {/* Dias do Mês */}
+            {daysInMonth.map((day) => {
+              const formattedDate = format(day, 'yyyy-MM-dd')
+              const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
+              const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+              const hasTrades = dayTrades.length > 0
+
+              return (
+                <div
+                  key={formattedDate}
+                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative ${
+                    hasTrades
+                      ? dayPnl > 0
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : dayPnl < 0
+                        ? 'bg-rose-950/20 border-rose-500/30'
+                        : 'bg-slate-900 border-slate-800'
+                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600'
+                  }`}
+                >
+                  <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
+
+                  {hasTrades && (
+                    <div className="mt-1">
+                      <span
+                        className={`text-xs md:text-sm font-bold block ${
+                          dayPnl > 0
+                            ? 'text-emerald-400'
+                            : dayPnl < 0
+                            ? 'text-rose-500'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        ${dayPnl.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block">
+                        {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Eficiência por Estratégia */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between">
@@ -640,7 +825,7 @@ export default function Home() {
 
           {strategyStats.length === 0 ? (
             <p className="text-xs text-slate-500 py-4 text-center">
-              Nenhuma operação cadastrada com estratégia para gerar estatísticas neste workspace.
+              Nenhuma operação cadastrada no período selecionado.
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -694,6 +879,17 @@ export default function Home() {
             </div>
 
             <form onSubmit={handleSubmitTrade} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">Data da Operação</label>
+                <input
+                  type="date"
+                  value={tradeDate}
+                  onChange={(e) => setTradeDate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
               <div>
                 <label className="text-xs text-slate-400">Destinar à Conta / Workspace</label>
                 <select
@@ -865,7 +1061,7 @@ export default function Home() {
                   onClick={handleClearAllTrades}
                   className="text-xs bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 px-3 py-1.5 rounded-lg transition"
                 >
-                  🧹 Limpar Todas as Operações
+                  🧹 Limpar Operações
                 </button>
               )}
             </div>
@@ -874,13 +1070,14 @@ export default function Home() {
               <p className="text-sm text-slate-500 py-8 text-center">Carregando diário...</p>
             ) : filteredTrades.length === 0 ? (
               <p className="text-sm text-slate-500 py-8 text-center">
-                Nenhum trade registrado neste workspace. Cadastre sua primeira operação ao lado!
+                Nenhuma operação encontrada para o workspace ou período selecionado.
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-300">
                   <thead className="text-xs text-slate-500 uppercase bg-slate-950 border-b border-slate-800">
                     <tr>
+                      <th className="p-3">Data</th>
                       <th className="p-3">Ativo</th>
                       <th className="p-3">Estratégia</th>
                       <th className="p-3">Tipo</th>
@@ -894,6 +1091,9 @@ export default function Home() {
                   <tbody className="divide-y divide-slate-800/50">
                     {filteredTrades.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-950/50 transition">
+                        <td className="p-3 text-xs text-slate-400 font-medium">
+                          {t.trade_date ? format(parseISO(t.trade_date), 'dd/MM/yyyy') : '-'}
+                        </td>
                         <td className="p-3 font-semibold text-white">{t.asset}</td>
                         <td className="p-3">
                           <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-medium">
