@@ -125,7 +125,6 @@ export default function Home() {
   async function fetchData() {
     setLoadingTrades(true)
 
-    // 1. Workspaces
     const { data: wsData } = await supabase
       .from('workspaces')
       .select('*')
@@ -138,7 +137,6 @@ export default function Home() {
       }
     }
 
-    // 2. Estratégias
     const { data: stratData } = await supabase
       .from('strategies')
       .select('*')
@@ -151,7 +149,6 @@ export default function Home() {
       }
     }
 
-    // 3. Trades
     const { data: tradesData } = await supabase
       .from('trades')
       .select('*')
@@ -177,7 +174,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Workspaces ---
   async function handleCreateWorkspace(e: React.FormEvent) {
     e.preventDefault()
     if (!newWorkspaceName.trim() || !session?.user) return
@@ -222,7 +218,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Estratégias ---
   async function handleCreateStrategy(e: React.FormEvent) {
     e.preventDefault()
     if (!newStrategyName.trim() || !session?.user) return
@@ -242,7 +237,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Trades ---
   async function handleSubmitTrade(e: React.FormEvent) {
     e.preventDefault()
     if (!session?.user) return
@@ -463,7 +457,7 @@ export default function Home() {
     )
   }
 
-  // --- Filtragem dos Trades pelo Workspace Selecionado e Período de Data ---
+  // --- Filtragem dos Trades ---
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
@@ -744,7 +738,7 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {strategyStats.map((st) => {
-                const stratWinRate = ((st.wins / st.total) * 100).toFixed(1)
+                const stratWinRate = st.total > 0 ? ((st.wins / st.total) * 100).toFixed(1) : '0'
                 return (
                   <div key={st.name} className="bg-slate-950 border border-slate-800/80 p-4 rounded-lg space-y-2">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -1129,12 +1123,10 @@ export default function Home() {
               </div>
             ))}
 
-            {/* Células vazias para alinhar o primeiro dia do mês */}
             {Array.from({ length: startDayOfWeek }).map((_, index) => (
               <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
             ))}
 
-            {/* Dias do Mês */}
             {daysInMonth.map((day) => {
               const formattedDate = format(day, 'yyyy-MM-dd')
               const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
