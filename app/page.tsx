@@ -28,6 +28,7 @@ export default function Home() {
   // Auth States
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [authError, setAuthError] = useState('')
 
@@ -102,7 +103,6 @@ export default function Home() {
     if (pnlVal > 0) result = 'WIN'
     if (pnlVal < 0) result = 'LOSS'
 
-    // Obter ou criar workspace do usuário autenticado
     let { data: wsData } = await supabase
       .from('workspaces')
       .select('id')
@@ -161,7 +161,7 @@ export default function Home() {
     )
   }
 
-  // Tela de Login / Cadastro
+  // Tela de Login / Cadastro por E-mail
   if (!session) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
@@ -171,7 +171,7 @@ export default function Home() {
               📊 TRADER DASHBOARD
             </h1>
             <p className="text-xs text-slate-400">
-              {isSignUp ? 'Crie sua conta para acessar seu diário' : 'Entre com suas credenciais de acesso'}
+              {isSignUp ? 'Crie sua conta com e-mail' : 'Entre no seu diário de operações'}
             </p>
           </div>
 
@@ -196,14 +196,24 @@ export default function Home() {
 
             <div>
               <label className="text-xs text-slate-400">Senha</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                required
-              />
+              <div className="relative mt-1">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
+                  title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
 
             <button
@@ -242,7 +252,7 @@ export default function Home() {
       <header className="max-w-7xl mx-auto flex justify-between items-center pb-6 border-b border-slate-800">
         <div>
           <h1 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
-            📊 DASHBOARD TRADER UNIVERSAL
+            📊 DASHBOARD TRADER
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
