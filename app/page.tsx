@@ -45,6 +45,7 @@ interface Trade {
   chart_url?: string
   notes?: string
   trade_date: string
+  followed_plan?: string // Novo campo adicionado
   created_at?: string
 }
 
@@ -100,6 +101,7 @@ export default function Home() {
   const [chartUrl, setChartUrl] = useState('')
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
+  const [followedPlan, setFollowedPlan] = useState('DENTRO') // Novo estado do formulário ('DENTRO' ou 'FORA')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   // --- Estados do Painel de Simulação de Monte Carlo estilo FTMO ---
@@ -237,7 +239,8 @@ export default function Home() {
                 result_type: t.result_type,
                 chart_url: t.chart_url,
                 notes: t.notes,
-                trade_date: t.trade_date
+                trade_date: t.trade_date,
+                followed_plan: t.followed_plan || 'DENTRO'
               })
             }
 
@@ -374,6 +377,7 @@ export default function Home() {
       chart_url: chartUrl.trim() || null,
       trade_date: tradeDate || new Date().toISOString().split('T')[0],
       notes,
+      followed_plan: followedPlan,
     }
 
     if (editingTradeId) {
@@ -410,6 +414,7 @@ export default function Home() {
     setChartUrl(trade.chart_url || '')
     setTradeDate(trade.trade_date || new Date().toISOString().split('T')[0])
     setNotes(trade.notes || '')
+    setFollowedPlan(trade.followed_plan || 'DENTRO')
     setTargetWorkspaceId(trade.workspace_id)
     
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -464,6 +469,7 @@ export default function Home() {
     setRMultiple('')
     setChartUrl('')
     setNotes('')
+    setFollowedPlan('DENTRO')
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
@@ -1365,6 +1371,14 @@ export default function Home() {
                 </div>
 
                 <div>
+                  <label className="text-xs text-slate-400">Segui o operacional como deve ser feito?</label>
+                  <select value={followedPlan} onChange={e => setFollowedPlan(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                    <option value="DENTRO">✅ Dentro do Planejado</option>
+                    <option value="FORA">⚠️ Fora do Planejado</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="text-xs text-slate-400">Preço de Entrada</label>
                   <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
                 </div>
@@ -1436,7 +1450,7 @@ export default function Home() {
                         <th className="p-3 font-semibold">Data</th>
                         <th className="p-3 font-semibold">Ativo</th>
                         <th className="p-3 font-semibold">Dir</th>
-                        <th className="p-3 font-semibold">RR</th>
+                        <th className="p-3 font-semibold">Plano</th>
                         <th className="p-3 font-semibold">PnL ($)</th>
                         <th className="p-3 font-semibold text-right">Ações</th>
                       </tr>
@@ -1451,7 +1465,11 @@ export default function Home() {
                               {trade.direction}
                             </span>
                           </td>
-                          <td className="p-3 font-medium text-purple-400 text-xs">{trade.r_multiple ? `${trade.r_multiple}R` : '-'}</td>
+                          <td className="p-3">
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${trade.followed_plan === 'FORA' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                              {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Dentro'}
+                            </span>
+                          </td>
                           <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                             ${trade.pnl.toFixed(2)}
                           </td>
