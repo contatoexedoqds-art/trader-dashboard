@@ -469,7 +469,7 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
-  // --- Função para Rodar a Simulação de Monte Carlo no Estilo Matplotlib ---
+  // --- Função para Rodar a Simulação de Monte Carlo ---
   function runMonteCarloSimulation(e: React.FormEvent) {
     e.preventDefault()
 
@@ -490,8 +490,8 @@ export default function Home() {
     let maxWinningStreakGlobal = 0
     let maxLosingStreakGlobal = 0
 
-    // Cores aleatórias ou predefinidas para dar o aspecto do matplotlib (várias cores)
-    const colorPalette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ca8a04', '#0891b2', '#4f46e5', '#e11d48', '#65a30d', '#c026d3']
+    // Cores vibrantes para destacar perfeitamente no fundo escuro
+    const colorPalette = ['#60a5fa', '#f87171', '#4ade80', '#c084fc', '#facc15', '#22d3ee', '#818cf8', '#fb7185', '#a3e635', '#e879f9']
 
     for (let p = 0; p < pathsCount; p++) {
       let currentCap = initialCap
@@ -902,7 +902,7 @@ export default function Home() {
                 🎲 Simulador de Teste de Monte Carlo
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Configure os parâmetros abaixo para gerar o passeio aleatório dos preços a partir de S(0) no estilo Matplotlib.
+                Configure os parâmetros abaixo para gerar o passeio aleatório dos preços a partir de S(0).
               </p>
             </div>
 
@@ -1034,29 +1034,29 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* GRÁFICO ESTILO MATPLOTLIB (Fundo Branco/Cinza Claro, Grade Quadriculada, Linhas Coloridas e Sem Quebras) */}
-                <div className="bg-slate-900 border border-slate-300 p-4 rounded-xl space-y-2 text-slate-900 shadow-xl">
-                  {/* Título Estilo Matplotlib */}
-                  <div className="text-center font-serif text-sm font-semibold tracking-wide text-slate-800 pb-1">
+                {/* GRÁFICO COM FUNDO DA PÁGINA (bg-slate-900), GRADE SUAVE E LINHAS COLORIDAS */}
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2 text-slate-100 shadow-xl">
+                  {/* Título do Gráfico */}
+                  <div className="text-center font-serif text-sm font-semibold tracking-wide text-slate-200 pb-1">
                     Passeio aleatório dos preços a partir de S(0)
                   </div>
 
                   {/* Container do Gráfico */}
-                  <div className="relative h-80 bg-white border border-slate-400 grid grid-cols-1 grid-rows-1 p-2 overflow-hidden">
+                  <div className="relative h-80 bg-slate-900 border border-slate-700 grid grid-cols-1 grid-rows-1 p-2 overflow-hidden rounded-lg">
                     
-                    {/* Linhas de Grade Quadriculada (Grid do Matplotlib) */}
+                    {/* Linhas de Grade Quadriculada Sutil para Fundo Escuro */}
                     <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 pointer-events-none">
                       {Array.from({ length: 36 }).map((_, i) => (
-                        <div key={i} className="border-r border-b border-slate-200/80" />
+                        <div key={i} className="border-r border-b border-slate-800/60" />
                       ))}
                     </div>
 
                     {/* Eixo Y Label */}
-                    <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 text-[11px] font-sans font-medium text-slate-700 tracking-wider">
+                    <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 text-[11px] font-sans font-medium text-slate-400 tracking-wider">
                       Preço
                     </div>
 
-                    {/* SVG para desenhar linhas contínuas suaves cruzando os pontos (estilo exato da imagem) */}
+                    {/* SVG para desenhar linhas contínuas suaves cruzando os pontos */}
                     <svg className="absolute inset-12 right-4 bottom-8 top-4 w-[calc(100%-4rem)] h-[calc(100%-3rem)] overflow-visible">
                       {(() => {
                         const allPoints = mcResults.paths.flat().map((i: any) => i.capital)
@@ -1067,7 +1067,7 @@ export default function Home() {
                         return mcResults.paths.map((path: any[], idx: number) => {
                           const strokeColor = mcResults.colorPalette[idx % mcResults.colorPalette.length]
 
-                          // Gerar string de pontos para o elemento <polyline> ou <path> SVG
+                          // Gerar string de pontos para o elemento <polyline> SVG
                           const pointsString = path.map((point, pIdx) => {
                             const x = (pIdx / (path.length - 1)) * 100
                             const y = 100 - ((point.capital - minVal) / range) * 100
@@ -1083,7 +1083,7 @@ export default function Home() {
                                 strokeWidth="1.5"
                                 strokeOpacity="0.85"
                                 points={pointsString}
-                                className="transition-all duration-200 hover:stroke-width-3 hover:stroke-black cursor-pointer"
+                                className="transition-all duration-200 hover:stroke-width-3 hover:stroke-white cursor-pointer"
                               />
 
                               {/* Pontos invisíveis maiores espalhados para tooltip ao passar o mouse */}
@@ -1096,7 +1096,7 @@ export default function Home() {
                                     cx={`${cx}%`}
                                     cy={`${cy}%`}
                                     r="4"
-                                    className="fill-transparent hover:fill-slate-900 cursor-pointer group/point"
+                                    className="fill-transparent hover:fill-emerald-400 cursor-pointer group/point"
                                   >
                                     <title>{`Iteração/Dia #${point.step}\nPreço: $${point.capital.toFixed(2)}\nPnL do Ponto: $${point.pnl.toFixed(2)}\nDrawdown: ${point.drawdown.toFixed(1)}%`}</title>
                                   </circle>
@@ -1109,12 +1109,12 @@ export default function Home() {
                     </svg>
 
                     {/* Eixo X Label */}
-                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[11px] font-sans font-medium text-slate-700">
+                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[11px] font-sans font-medium text-slate-400">
                       Tempo (dias)
                     </div>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 text-center italic">
+                  <p className="text-[11px] text-slate-400 text-center italic">
                     * Passe o mouse diretamente sobre as linhas ou pontos coloridos para ver os detalhes da iteração correspondente.
                   </p>
                 </div>
