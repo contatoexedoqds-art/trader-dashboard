@@ -105,7 +105,7 @@ export default function Home() {
   // --- Estados do Painel de Simulação de Monte Carlo Manual ---
   const [mcInitialCapital, setMcInitialCapital] = useState('42') // Estilo S(0) base imagem
   const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
-  const [mcRiskValue, setMcRiskValue] = useState('1') 
+  const [mcRiskValue, setMcRiskValue] = useState('0.25') // Ajustado para o padrão de risco do usuário (0.25%)
   const [mcWinRate, setMcWinRate] = useState('50') 
   const [mcPayoff, setMcPayoff] = useState('1.5') 
   const [mcIterations, setMcIterations] = useState('45') // Dias (estilo imagem)
@@ -474,7 +474,7 @@ export default function Home() {
     e.preventDefault()
 
     const initialCap = parseFloat(mcInitialCapital) || 42
-    const riskVal = parseFloat(mcRiskValue) || 1
+    const riskVal = parseFloat(mcRiskValue) || 0.25
     const winRate = parseFloat(mcWinRate) || 50
     const payoff = parseFloat(mcPayoff) || 1.5
     const iterations = parseInt(mcIterations) || 45
