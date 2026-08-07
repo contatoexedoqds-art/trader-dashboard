@@ -84,6 +84,7 @@ export default function Home() {
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date())
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [calendarFilterDate, setCalendarFilterDate] = useState('')
 
   // Form Trades
   const [asset, setAsset] = useState('NASDAQ')
@@ -122,7 +123,6 @@ export default function Home() {
   async function fetchData() {
     setLoadingTrades(true)
 
-    // 1. Workspaces
     const { data: wsData } = await supabase
       .from('workspaces')
       .select('*')
@@ -135,7 +135,6 @@ export default function Home() {
       }
     }
 
-    // 2. Estratégias
     const { data: stratData } = await supabase
       .from('strategies')
       .select('*')
@@ -148,7 +147,6 @@ export default function Home() {
       }
     }
 
-    // 3. Trades
     const { data: tradesData } = await supabase
       .from('trades')
       .select('*')
@@ -174,7 +172,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Workspaces ---
   async function handleCreateWorkspace(e: React.FormEvent) {
     e.preventDefault()
     if (!newWorkspaceName.trim() || !session?.user) return
@@ -219,7 +216,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Estratégias ---
   async function handleCreateStrategy(e: React.FormEvent) {
     e.preventDefault()
     if (!newStrategyName.trim() || !session?.user) return
@@ -239,7 +235,6 @@ export default function Home() {
     }
   }
 
-  // --- Gerenciamento de Trades ---
   async function handleSubmitTrade(e: React.FormEvent) {
     e.preventDefault()
     if (!session?.user) return
@@ -461,16 +456,18 @@ export default function Home() {
     )
   }
 
-  // --- Filtragem dos Trades pelo Workspace Selecionado e Período de Data ---
+  // --- Filtragem dos Trades ---
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
-    if (startDate) {
-      matchDate = matchDate && t.trade_date >= startDate
+    
+    if (calendarFilterDate) {
+      matchDate = t.trade_date === calendarFilterDate
+    } else {
+      if (startDate) matchDate = matchDate && t.trade_date >= startDate
+      if (endDate) matchDate = matchDate && t.trade_date <= endDate
     }
-    if (endDate) {
-      matchDate = matchDate && t.trade_date <= endDate
-    }
+    
     return matchWs && matchDate
   })
 
@@ -665,7 +662,10 @@ export default function Home() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  setCalendarFilterDate('')
+                }}
                 className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -675,16 +675,20 @@ export default function Home() {
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  setCalendarFilterDate('')
+                }}
                 className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
 
-            {(startDate || endDate) && (
+            {(startDate || endDate || calendarFilterDate) && (
               <button
                 onClick={() => {
                   setStartDate('')
                   setEndDate('')
+                  setCalendarFilterDate('')
                 }}
                 className="text-xs text-rose-400 hover:underline px-2 py-1"
               >
@@ -693,6 +697,15 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {calendarFilterDate && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-400 flex justify-between items-center">
+            <span>🔍 Filtrando apenas o dia: <strong className="text-white">{format(parseISO(calendarFilterDate), 'dd/MM/yyyy')}</strong> (selecionado no calendário)</span>
+            <button onClick={() => setCalendarFilterDate('')} className="underline hover:text-emerald-300 font-bold">
+              Remover Filtro de Dia
+            </button>
+          </div>
+        )}
 
         {/* Cards Estatísticos Globais */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -780,8 +793,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Grade para colocar o Formulário e o Histórico lado a lado com alturas equivalentes */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
+        {/* Grade do Formulário e Histórico com ID para Scroll */}
+        <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
           
           {/* Formulário de Registro/Edição de Trades */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
@@ -791,7 +804,6 @@ export default function Home() {
               </h2>
               <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
-                {/* Linha 1 */}
                 <div>
                   <label className="text-xs text-slate-400">Data da Operação</label>
                   <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
@@ -817,7 +829,6 @@ export default function Home() {
                   </select>
                 </div>
 
-                {/* Linha 2 */}
                 <div>
                   <label className="text-xs text-slate-400">Estratégia Utilizada</label>
                   <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
@@ -841,7 +852,6 @@ export default function Home() {
                   <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
                 </div>
 
-                {/* Linha 3 */}
                 <div>
                   <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
                   <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
@@ -857,7 +867,6 @@ export default function Home() {
                   <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
                 </div>
 
-                {/* Linha 4 */}
                 <div className="md:col-span-2">
                   <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
                   <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
@@ -865,7 +874,6 @@ export default function Home() {
               </form>
             </div>
 
-            {/* Botões do Form fixados ao final para garantir alinhamento */}
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800/80">
               {editingTradeId && (
                 <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
@@ -878,7 +886,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Tabela de Histórico de Trades com altura equivalente e paginação fixa */}
+          {/* Tabela de Histórico com Altura Fixa e Paginação */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
@@ -964,7 +972,7 @@ export default function Home() {
 
         </div>
 
-        {/* CALENDÁRIO ESTILO TRADER LEZELLA */}
+        {/* CALENDÁRIO COM CLIQUE INTERATIVO */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -972,7 +980,7 @@ export default function Home() {
                 📆 Calendário de Desempenho
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Visão mensal estilo Trader Lezella com diário de lucros e operações por dia.
+                Clique em qualquer dia para filtrar e visualizar as operações dele no histórico acima.
               </p>
             </div>
 
@@ -1001,7 +1009,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Grid do Calendário */}
           <div className="grid grid-cols-7 gap-1 md:gap-2">
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
               <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
@@ -1009,12 +1016,10 @@ export default function Home() {
               </div>
             ))}
 
-            {/* Células vazias para alinhar o primeiro dia do mês */}
             {Array.from({ length: startDayOfWeek }).map((_, index) => (
               <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
             ))}
 
-            {/* Dias do Mês */}
             {daysInMonth.map((day) => {
               const formattedDate = format(day, 'yyyy-MM-dd')
               const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
@@ -1024,15 +1029,20 @@ export default function Home() {
               return (
                 <div
                   key={formattedDate}
-                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative ${
+                  onClick={() => {
+                    setCalendarFilterDate(formattedDate)
+                    setCurrentPage(1) // Reseta para a página 1 do histórico
+                    document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
                     hasTrades
                       ? dayPnl > 0
-                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        ? 'bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/40'
                         : dayPnl < 0
-                        ? 'bg-rose-950/20 border-rose-500/30'
-                        : 'bg-slate-900 border-slate-800'
-                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600'
-                  }`}
+                        ? 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-950/40'
+                        : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80'
+                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600 hover:bg-slate-900/50'
+                  } ${calendarFilterDate === formattedDate ? 'ring-2 ring-emerald-400' : ''}`}
                 >
                   <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
 
