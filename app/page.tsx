@@ -53,6 +53,9 @@ export default function Home() {
   const [session, setSession] = useState<any>(null)
   const [loadingSession, setLoadingSession] = useState(true)
 
+  // Navegação de Abas ("dashboard" ou "montecarlo")
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'montecarlo'>('dashboard')
+
   // Auth States
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -99,6 +102,16 @@ export default function Home() {
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
+
+  // --- Estados do Painel de Simulação de Monte Carlo Manual ---
+  const [mcInitialCapital, setMcInitialCapital] = useState('10000')
+  const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
+  const [mcRiskValue, setMcRiskValue] = useState('1') // 1% ou $100
+  const [mcWinRate, setMcWinRate] = useState('50') // 50%
+  const [mcPayoff, setMcPayoff] = useState('1.5') // Risco/Retorno 1:1.5
+  const [mcIterations, setMcIterations] = useState('100') // Quantidade de Trades por caminho
+  const [mcPathsCount, setMcPathsCount] = useState('50') // Quantidade de simulações simultâneas
+  const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -192,7 +205,6 @@ export default function Home() {
           if (confirm(`Deseja restaurar o backup? Isso irá inserir ${parsedData.trades.length} operações e ${parsedData.workspaces.length} workspaces na sua conta atual.`)) {
             setLoadingTrades(true)
 
-            // Restaurar Workspaces
             for (const ws of parsedData.workspaces) {
               await supabase.from('workspaces').upsert({
                 id: ws.id,
@@ -202,7 +214,6 @@ export default function Home() {
               })
             }
 
-            // Restaurar Strategies
             if (parsedData.strategies) {
               for (const st of parsedData.strategies) {
                 await supabase.from('strategies').upsert({
@@ -213,7 +224,6 @@ export default function Home() {
               }
             }
 
-            // Restaurar Trades
             for (const t of parsedData.trades) {
               await supabase.from('trades').upsert({
                 id: t.id,
@@ -460,6 +470,86 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
+  // --- Função para Rodar a Simulação de Monte Carlo Manual ---
+  function runMonteCarloSimulation(e: React.FormEvent) {
+    e.preventDefault()
+
+    const initialCap = parseFloat(mcInitialCapital) || 10000
+    const riskVal = parseFloat(mcRiskValue) || 1
+    const winRate = parseFloat(mcWinRate) || 50
+    const payoff = parseFloat(mcPayoff) || 1.5
+    const iterations = parseInt(mcIterations) || 100
+    const pathsCount = parseInt(mcPathsCount) || 50
+
+    const paths: number[][] = []
+    let ruinCount = 0
+    let finalCapitals: number[] = []
+    let maxDrawdowns: number[] = []
+
+    for (let p = 0; p < pathsCount; p++) {
+      let currentCap = initialCap
+      let pathValues = [currentCap]
+      let peak = currentCap
+      let maxDd = 0
+
+      for (let i = 0; i < iterations; i++) {
+        if (currentCap <= 0) {
+          currentCap = 0
+          pathValues.push(currentCap)
+          continue
+        }
+
+        // Calcula o risco em dinheiro do trade
+        const riskAmount = mcRiskType === 'percent' ? currentCap * (riskVal / 100) : riskVal
+
+        const isWin = Math.random() * 100 < winRate
+
+        if (isWin) {
+          currentCap += riskAmount * payoff
+        } else {
+          currentCap -= riskAmount
+        }
+
+        if (currentCap < 0) currentCap = 0
+
+        pathValues.push(currentCap)
+
+        if (currentCap > peak) {
+          peak = currentCap
+        }
+        const dd = peak > 0 ? ((peak - currentCap) / peak) * 100 : 0
+        if (dd > maxDd) {
+          maxDd = dd
+        }
+      }
+
+      paths.push(pathValues)
+      finalCapitals.push(currentCap)
+      maxDrawdowns.push(maxDd)
+
+      if (currentCap <= 0) {
+        ruinCount++
+      }
+    }
+
+    const probabilityOfRuin = (ruinCount / pathsCount) * 100
+    const avgFinalCapital = finalCapitals.reduce((a, b) => a + b, 0) / pathsCount
+    const avgMaxDD = maxDrawdowns.reduce((a, b) => a + b, 0) / pathsCount
+    const bestCapital = Math.max(...finalCapitals)
+    const worstCapital = Math.min(...finalCapitals)
+
+    setMcResults({
+      probabilityOfRuin,
+      avgFinalCapital,
+      avgMaxDD,
+      bestCapital,
+      worstCapital,
+      paths,
+      initialCap,
+      iterations
+    })
+  }
+
   if (loadingSession) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-sans">
@@ -617,6 +707,22 @@ export default function Home() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Navegação: Dashboard vs Teste de Monte Carlo */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`text-xs px-3 py-1.5 rounded transition font-semibold ${activeTab === 'dashboard' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+            >
+              📈 Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('montecarlo')}
+              className={`text-xs px-3 py-1.5 rounded transition font-semibold ${activeTab === 'montecarlo' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+            >
+              📊 Teste de Monte Carlo
+            </button>
+          </div>
+
           {/* Botões de Backup e Restauração Local */}
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
@@ -750,7 +856,181 @@ export default function Home() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto mt-8 space-y-8">
+      {/* RENDERIZAÇÃO CONDICIONAL DA ABA: DASHBOARD OU MONTE CARLO */}
+      {activeTab === 'montecarlo' ? (
+        <main className="max-w-7xl mx-auto mt-8 space-y-8">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                🎲 Simulador de Teste de Monte Carlo
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Configure os parâmetros abaixo para simular múltiplos caminhos futuros para o seu capital com base na sua gestão de risco e assertividade esperada.
+              </p>
+            </div>
+
+            <form onSubmit={runMonteCarloSimulation} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-slate-950 p-5 rounded-xl border border-slate-800/80">
+              <div>
+                <label className="text-xs text-slate-400">Capital Inicial ($)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mcInitialCapital}
+                  onChange={(e) => setMcInitialCapital(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Tipo de Risco</label>
+                <select
+                  value={mcRiskType}
+                  onChange={(e) => setMcRiskType(e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                >
+                  <option value="percent">Percentual do Capital (%)</option>
+                  <option value="fixed">Valor Fixo em Dinheiro ($)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">
+                  {mcRiskType === 'percent' ? 'Risco por Operação (%)' : 'Risco Fixo por Operação ($)'}
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mcRiskValue}
+                  onChange={(e) => setMcRiskValue(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Assertividade / Win Rate (%)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mcWinRate}
+                  onChange={(e) => setMcWinRate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Risco / Retorno (Payoff - ex: 1.5)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mcPayoff}
+                  onChange={(e) => setMcPayoff(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Trades por Simulação (Iterações)</label>
+                <input
+                  type="number"
+                  value={mcIterations}
+                  onChange={(e) => setMcIterations(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Quantidade de Caminhos (Simulações)</label>
+                <input
+                  type="number"
+                  value={mcPathsCount}
+                  onChange={(e) => setMcPathsCount(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 px-4 rounded-lg transition text-sm"
+                >
+                  🚀 Rodar Simulação
+                </button>
+              </div>
+            </form>
+
+            {mcResults && (
+              <div className="space-y-6 pt-4 border-t border-slate-800">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <span className="text-xs text-slate-400 font-medium uppercase">Probabilidade de Ruína</span>
+                    <p className={`text-2xl font-bold mt-1 ${mcResults.probabilityOfRuin > 20 ? 'text-rose-500' : 'text-emerald-400'}`}>
+                      {mcResults.probabilityOfRuin.toFixed(1)}%
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <span className="text-xs text-slate-400 font-medium uppercase">Capital Médio Final</span>
+                    <p className={`text-2xl font-bold mt-1 ${mcResults.avgFinalCapital >= mcResults.initialCap ? 'text-emerald-400' : 'text-rose-500'}`}>
+                      ${mcResults.avgFinalCapital.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <span className="text-xs text-slate-400 font-medium uppercase">Drawdown Médio Máx.</span>
+                    <p className="text-2xl font-bold text-amber-400 mt-1">
+                      {mcResults.avgMaxDD.toFixed(1)}%
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <span className="text-xs text-slate-400 font-medium uppercase">Melhor / Pior Capital</span>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs font-bold text-emerald-400">${mcResults.bestCapital.toFixed(0)}</span>
+                      <span className="text-xs font-bold text-rose-500">${mcResults.worstCapital.toFixed(0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-3">
+                  <h3 className="text-sm font-bold text-white">📈 Projeção Gráfica dos Caminhos (Monte Carlo)</h3>
+                  <div className="h-64 flex items-end gap-1 border-b border-l border-slate-800 p-2 overflow-x-auto">
+                    {mcResults.paths.map((path: number[], idx: number) => {
+                      const maxVal = Math.max(...mcResults.paths.flat(), mcResults.initialCap * 1.5)
+                      const minVal = 0
+                      const range = maxVal - minVal || 1
+
+                      return (
+                        <div key={idx} className="flex-1 min-w-[4px] h-full relative flex items-end">
+                          {path.map((val: number, stepIdx: number) => {
+                            const heightPercent = Math.max(0, Math.min(100, ((val - minVal) / range) * 100))
+                            return (
+                              <div
+                                key={stepIdx}
+                                style={{ height: `${heightPercent}%`, width: '100%' }}
+                                className={`absolute bottom-0 w-full opacity-30 ${val >= mcResults.initialCap ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                              />
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-500 text-center">
+                    Cada linha representa uma simulação independente de {mcResults.iterations} operações. Linhas verdes terminam no lucro; vermelhas no prejuízo.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      ) : (
+        <main className="max-w-7xl mx-auto mt-8 space-y-8">
         {/* Filtro de Período Geral */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -1135,7 +1415,7 @@ export default function Home() {
                   key={formattedDate}
                   onClick={() => {
                     setCalendarFilterDate(formattedDate)
-                    setCurrentPage(1) // Reseta para a página 1 do histórico
+                    setCurrentPage(1)
                     document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
                   }}
                   className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
@@ -1175,6 +1455,7 @@ export default function Home() {
         </div>
 
       </main>
+      )}
     </div>
   )
 }
