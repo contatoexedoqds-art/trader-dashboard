@@ -498,7 +498,6 @@ export default function Home() {
     let maxWinStreakGlobal = 0
     let maxLossStreakGlobal = 0
 
-    // Para calcular a média por passo (iteracao)
     const stepSumEquities = new Array(iterations + 1).fill(0)
 
     for (let p = 0; p < pathsCount; p++) {
@@ -557,7 +556,6 @@ export default function Home() {
       maxDrawdowns.push(pathMaxDd)
     }
 
-    // Calcular a curva média
     const averagePath = stepSumEquities.map((sumVal, idx) => ({
       step: idx,
       equity: sumVal / pathsCount
@@ -584,7 +582,6 @@ export default function Home() {
     })
   }
 
-  // Executar simulação padrão ao carregar a aba de monte carlo pela primeira vez se vazio
   useEffect(() => {
     if (activeTab === 'montecarlo' && !mcResults) {
       runMonteCarloSimulation()
@@ -676,7 +673,6 @@ export default function Home() {
     )
   }
 
-  // --- Filtragem dos Trades ---
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
@@ -691,20 +687,17 @@ export default function Home() {
     return matchWs && matchDate
   })
 
-  // Paginação do Histórico
   const totalPages = Math.ceil(filteredTrades.length / itemsPerPage) || 1
   const paginatedTrades = filteredTrades.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   )
 
-  // --- Estatísticas Dinâmicas ---
   const totalTrades = filteredTrades.length
   const totalPnl = filteredTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
   const totalWins = filteredTrades.filter((t) => t.result_type === 'WIN').length
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0'
 
-  // --- Lógica do Calendário ---
   const monthStart = startOfMonth(currentCalendarMonth)
   const monthEnd = endOfMonth(monthStart)
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
@@ -719,7 +712,6 @@ export default function Home() {
 
   const monthlyPnl = monthTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
 
-  // --- Análise de Eficiência por Estratégia ---
   const strategyStats = Object.values(
     filteredTrades.reduce((acc: any, trade) => {
       const strat = trade.strategy_name || 'Outros / Sem Categoria'
@@ -732,11 +724,10 @@ export default function Home() {
       acc[strat].totalR += trade.r_multiple || 0
       return acc
     }, {})
-  ).sort((a: any, b: any) => b.pnl - a.pnl);
+  ).sort((a: any, b: any) => b.pnl - a.pnl)
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
-      {/* Header */}
       <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between md:items-center gap-4 pb-6 border-b border-slate-800">
         <div>
           <h1 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
@@ -819,7 +810,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Modal Criar Novo Workspace */}
       {showCreateWsModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
@@ -857,7 +847,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal Criar Nova Estratégia */}
       {showCreateStratModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
@@ -895,7 +884,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* RENDERIZAÇÃO CONDICIONAL DA ABA: DASHBOARD OU MONTE CARLO */}
       {activeTab === 'montecarlo' ? (
         <main className="max-w-7xl mx-auto mt-8 space-y-8">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-6">
@@ -909,8 +897,6 @@ export default function Home() {
             </div>
 
             <form onSubmit={runMonteCarloSimulation} className="space-y-6 bg-slate-950 p-6 rounded-xl border border-slate-800/80">
-              
-              {/* Linha 1 de Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
@@ -967,7 +953,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Linha 2 de Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
@@ -1061,14 +1046,12 @@ export default function Home() {
 
             {mcResults && (
               <div className="space-y-6 pt-6 border-t border-slate-800">
-                {/* GRÁFICO DE LINHAS ESTILO FTMO */}
                 <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4 shadow-2xl">
                   <div className="flex justify-end gap-2 text-slate-400 text-xs">
                     <button type="button" onClick={() => runMonteCarloSimulation()} className="p-1 hover:text-white" title="Atualizar / Recalcular">🔄</button>
                   </div>
 
                   <div className="relative h-96 bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-end">
-                    {/* Grade de fundo horizontal */}
                     <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4">
                       {[0, 1, 2, 3, 4].map((i) => {
                         const val = mcResults.minEquity + ((mcResults.maxEquity - mcResults.minEquity) / 4) * (4 - i)
@@ -1080,8 +1063,7 @@ export default function Home() {
                       })}
                     </div>
 
-                    {/* SVG para renderizar as linhas de equidade */}
-                    <svg className="absolute inset-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)]">
+                    <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="absolute left-4 top-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)] overflow-visible">
                       {(() => {
                         const minEq = mcResults.minEquity
                         const maxEq = mcResults.maxEquity === minEq ? minEq + 1000 : mcResults.maxEquity
@@ -1089,12 +1071,11 @@ export default function Home() {
 
                         return (
                           <>
-                            {/* Caminhos individuais simulados */}
                             {mcResults.paths.map((path: any[], pIdx: number) => {
                               const pointsStr = path.map((pt, i) => {
-                                const x = (i / mcResults.iterations) * 100
-                                const y = 100 - ((pt.equity - minEq) / spanEq) * 100
-                                return `${x}%,${y}%`
+                                const x = (i / mcResults.iterations) * 1000
+                                const y = 400 - ((pt.equity - minEq) / spanEq) * 400
+                                return `${x},${y}`
                               }).join(' ')
 
                               const color = mcResults.colorPalette[pIdx % mcResults.colorPalette.length]
@@ -1104,38 +1085,37 @@ export default function Home() {
                                   key={pIdx}
                                   fill="none"
                                   stroke={color}
-                                  strokeWidth="1.5"
+                                  strokeWidth="2"
                                   strokeOpacity="0.85"
                                   points={pointsStr}
                                 />
                               )
                             })}
 
-                            {/* Linha preta grossa da média */}
                             {mcResults.averagePath && (
-                              <polyline
-                                fill="none"
-                                stroke="#000000"
-                                strokeWidth="3"
-                                points={mcResults.averagePath.map((pt: any, i: number) => {
-                                  const x = (i / mcResults.iterations) * 100
-                                  const y = 100 - ((pt.equity - minEq) / spanEq) * 100
-                                  return `${x}%,${y}%`
-                                }).join(' ')}
-                              />
-                            )}
-                            {mcResults.averagePath && (
-                              <polyline
-                                fill="none"
-                                stroke="#ffffff"
-                                strokeWidth="1.5"
-                                strokeDasharray="3,3"
-                                points={mcResults.averagePath.map((pt: any, i: number) => {
-                                  const x = (i / mcResults.iterations) * 100
-                                  const y = 100 - ((pt.equity - minEq) / spanEq) * 100
-                                  return `${x}%,${y}%`
-                                }).join(' ')}
-                              />
+                              <>
+                                <polyline
+                                  fill="none"
+                                  stroke="#000000"
+                                  strokeWidth="4"
+                                  points={mcResults.averagePath.map((pt: any, i: number) => {
+                                    const x = (i / mcResults.iterations) * 1000
+                                    const y = 400 - ((pt.equity - minEq) / spanEq) * 400
+                                    return `${x},${y}`
+                                  }).join(' ')}
+                                />
+                                <polyline
+                                  fill="none"
+                                  stroke="#ffffff"
+                                  strokeWidth="2"
+                                  strokeDasharray="4,4"
+                                  points={mcResults.averagePath.map((pt: any, i: number) => {
+                                    const x = (i / mcResults.iterations) * 1000
+                                    const y = 400 - ((pt.equity - minEq) / spanEq) * 400
+                                    return `${x},${y}`
+                                  }).join(' ')}
+                                />
+                              </>
                             )}
                           </>
                         )
@@ -1154,10 +1134,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* TABELA DE ESTATÍSTICAS ESTILO FTMO */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
                   <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800 text-sm">
-                    {/* Coluna Esquerda */}
                     <div className="divide-y divide-slate-800">
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
                         <span className="text-slate-300">Equidade mínima</span>
@@ -1177,7 +1155,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Coluna Direita */}
                     <div className="divide-y divide-slate-800">
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
                         <span className="text-slate-300">Drawdown Máximo</span>
@@ -1348,14 +1325,12 @@ export default function Home() {
         </div>
 
         <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
-          
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
                 {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
               </h2>
               <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
                 <div>
                   <label className="text-xs text-slate-400">Data da Operação</label>
                   <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
@@ -1519,7 +1494,6 @@ export default function Home() {
               </div>
             </div>
           </div>
-
         </div>
 
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
@@ -1618,7 +1592,6 @@ export default function Home() {
             })}
           </div>
         </div>
-
       </main>
       )}
     </div>
