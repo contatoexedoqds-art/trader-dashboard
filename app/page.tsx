@@ -769,100 +769,163 @@ export default function Home() {
           )}
         </div>
 
-        {/* Formulário de Registro/Edição de Trades */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
-          </h2>
-          <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* Linha 1 */}
-            <div>
-              <label className="text-xs text-slate-400">Data da Operação</label>
-              <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
-            
-            <div>
-              <label className="text-xs text-slate-400">Workspace / Conta</label>
-              <select value={targetWorkspaceId} onChange={e => setTargetWorkspaceId(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
+        {/* Grade para colocar o Formulário e o Histórico lado a lado (em telas grandes) */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+          
+          {/* Formulário de Registro/Edição de Trades */}
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
+            </h2>
+            <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Linha 1 */}
+              <div>
+                <label className="text-xs text-slate-400">Data da Operação</label>
+                <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
+              
+              <div>
+                <label className="text-xs text-slate-400">Workspace / Conta</label>
+                <select value={targetWorkspaceId} onChange={e => setTargetWorkspaceId(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                  {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Ativo (Par/Índice)</label>
-              <input type="text" value={asset} onChange={e => setAsset(e.target.value)} placeholder="Ex: EURUSD, XAUUSD" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Ativo (Par/Índice)</label>
+                <input type="text" value={asset} onChange={e => setAsset(e.target.value)} placeholder="Ex: EURUSD, XAUUSD" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Direção</label>
-              <select value={direction} onChange={e => setDirection(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                <option value="BUY">Long (Buy)</option>
-                <option value="SELL">Short (Sell)</option>
-              </select>
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Direção</label>
+                <select value={direction} onChange={e => setDirection(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                  <option value="BUY">Long (Buy)</option>
+                  <option value="SELL">Short (Sell)</option>
+                </select>
+              </div>
 
-            {/* Linha 2 */}
-            <div>
-              <label className="text-xs text-slate-400">Estratégia Utilizada</label>
-              <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                <option value="">Selecione...</option>
-                {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              </select>
-            </div>
+              {/* Linha 2 */}
+              <div>
+                <label className="text-xs text-slate-400">Estratégia Utilizada</label>
+                <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                  <option value="">Selecione...</option>
+                  {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Preço de Entrada</label>
-              <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Preço de Entrada</label>
+                <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Preço Stop Loss</label>
-              <input type="number" step="any" value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Ex: 1.08300" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Preço Stop Loss</label>
+                <input type="number" step="any" value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Ex: 1.08300" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Preço Take Profit</label>
-              <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Preço Take Profit</label>
+                <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            {/* Linha 3 */}
-            <div>
-              <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
-              <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              {/* Linha 3 */}
+              <div>
+                <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
+                <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-400">Risco/Retorno (R)</label>
-              <input type="number" step="any" value={rMultiple} onChange={e => setRMultiple(e.target.value)} placeholder="Ex: 2.5 ou -1" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div>
+                <label className="text-xs text-slate-400">Risco/Retorno (R)</label>
+                <input type="number" step="any" value={rMultiple} onChange={e => setRMultiple(e.target.value)} placeholder="Ex: 2.5 ou -1" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            <div className="md:col-span-2">
-              <label className="text-xs text-slate-400">Link da Imagem (TradingView/Print)</label>
-              <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-            </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-400">Link da Imagem (TradingView/Print)</label>
+                <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+              </div>
 
-            {/* Linha 4 */}
-            <div className="lg:col-span-4">
-              <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
-            </div>
+              {/* Linha 4 */}
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
+              </div>
 
-            {/* Botões do Form */}
-            <div className="lg:col-span-4 flex justify-end gap-3 mt-2">
-              {editingTradeId && (
-                <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
-                  Cancelar Edição
+              {/* Botões do Form */}
+              <div className="md:col-span-2 flex justify-end gap-3 mt-2">
+                {editingTradeId && (
+                  <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
+                    Cancelar Edição
+                  </button>
+                )}
+                <button type="submit" className="text-sm bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition">
+                  {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Tabela de Histórico de Trades */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="p-4 md:p-6 flex items-center justify-between border-b border-slate-800/80">
+              <h2 className="text-lg font-bold text-white">📖 Histórico de Operações</h2>
+              {filteredTrades.length > 0 && (
+                <button onClick={handleClearAllTrades} className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition">
+                  Limpar Tudo
                 </button>
               )}
-              <button type="submit" className="text-sm bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition">
-                {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
-              </button>
             </div>
-          </form>
+            
+            <div className="overflow-x-auto">
+              {filteredTrades.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-sm">
+                  Nenhuma operação encontrada para o período/workspace selecionado.
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase">
+                    <tr>
+                      <th className="p-3 font-semibold">Data</th>
+                      <th className="p-3 font-semibold">Ativo</th>
+                      <th className="p-3 font-semibold">Dir</th>
+                      <th className="p-3 font-semibold">RR</th>
+                      <th className="p-3 font-semibold">PnL ($)</th>
+                      <th className="p-3 font-semibold text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {filteredTrades.map((trade) => (
+                      <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
+                        <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
+                        <td className="p-3 font-bold text-slate-200">{trade.asset}</td>
+                        <td className="p-3">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                            {trade.direction}
+                          </span>
+                        </td>
+                        <td className="p-3 font-medium text-purple-400 text-xs">{trade.r_multiple ? `${trade.r_multiple}R` : '-'}</td>
+                        <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+                          ${trade.pnl.toFixed(2)}
+                        </td>
+                        <td className="p-3 text-right space-x-1">
+                          <button onClick={() => handleEditTrade(trade)} className="text-[11px] text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
+                            Editar
+                          </button>
+                          <button onClick={() => handleDeleteTrade(trade.id)} className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
+                            Excluir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
         </div>
 
-        {/* CALENDÁRIO ESTILO TRADER LEZELLA (Movido para cá) */}
+        {/* CALENDÁRIO ESTILO TRADER LEZELLA */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -955,66 +1018,6 @@ export default function Home() {
                 </div>
               )
             })}
-          </div>
-        </div>
-
-        {/* Tabela de Histórico de Trades */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="p-4 md:p-6 flex items-center justify-between border-b border-slate-800/80">
-            <h2 className="text-lg font-bold text-white">📖 Histórico de Operações</h2>
-            {filteredTrades.length > 0 && (
-              <button onClick={handleClearAllTrades} className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition">
-                Limpar Tudo
-              </button>
-            )}
-          </div>
-          
-          <div className="overflow-x-auto">
-            {filteredTrades.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-sm">
-                Nenhuma operação encontrada para o período/workspace selecionado.
-              </div>
-            ) : (
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase">
-                  <tr>
-                    <th className="p-4 font-semibold">Data</th>
-                    <th className="p-4 font-semibold">Ativo</th>
-                    <th className="p-4 font-semibold">Direção</th>
-                    <th className="p-4 font-semibold hidden md:table-cell">Estratégia</th>
-                    <th className="p-4 font-semibold">RR (R)</th>
-                    <th className="p-4 font-semibold">PnL ($)</th>
-                    <th className="p-4 font-semibold text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {filteredTrades.map((trade) => (
-                    <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
-                      <td className="p-4">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
-                      <td className="p-4 font-bold text-slate-200">{trade.asset}</td>
-                      <td className="p-4">
-                        <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                          {trade.direction}
-                        </span>
-                      </td>
-                      <td className="p-4 hidden md:table-cell text-xs">{trade.strategy_name}</td>
-                      <td className="p-4 font-medium text-purple-400">{trade.r_multiple ? `${trade.r_multiple}R` : '-'}</td>
-                      <td className={`p-4 font-bold ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
-                        ${trade.pnl.toFixed(2)}
-                      </td>
-                      <td className="p-4 text-right space-x-2">
-                        <button onClick={() => handleEditTrade(trade)} className="text-xs text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
-                          Editar
-                        </button>
-                        <button onClick={() => handleDeleteTrade(trade.id)} className="text-xs text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
-                          Excluir
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         </div>
 
