@@ -501,6 +501,12 @@ export default function Home() {
       acc[strat].totalR += trade.r_multiple || 0
       return acc
     }, {})
+    const strategyStats: StrategyStat[] = Object.values(strategyStatsMap).sort(
+    (a, b) => b.pnl - a.pnl
+  )
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
       {/* Header */}
