@@ -79,6 +79,9 @@ export default function Home() {
   const [loadingTrades, setLoadingTrades] = useState(false)
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null)
 
+  // Modal para Visualização de Imagem do TradingView
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null)
+
   // Pagination State for History
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
@@ -111,7 +114,7 @@ export default function Home() {
   const [mcIterations, setMcIterations] = useState('100') 
   const [mcLines, setMcLines] = useState('10') 
   const [mcRiskMode, setMcRiskMode] = useState<'percent' | 'risk'>('percent')
-  const [mcRiskPercent, setMcRiskPercent] = useState('0.25') // Atualizado para refletir o risco por operação correto de 0.25%
+  const [mcRiskPercent, setMcRiskPercent] = useState('0.25')
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -486,7 +489,6 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
-  // --- Função para Rodar a Simulação de Monte Carlo Estilo FTMO ---
   function runMonteCarloSimulation(e?: React.FormEvent) {
     if (e) e.preventDefault()
 
@@ -498,16 +500,8 @@ export default function Home() {
     const riskPct = parseFloat(mcRiskPercent) || 0.25
 
     const colorPalette = [
-      '#eab308', // amarelo
-      '#a855f7', // roxo
-      '#22c55e', // verde
-      '#3b82f6', // azul
-      '#ec4899', // rosa
-      '#f97316', // laranja
-      '#06b6d4', // ciano
-      '#84cc16', // lima
-      '#6366f1', // indigo
-      '#ef4444'  // vermelho
+      '#eab308', '#a855f7', '#22c55e', '#3b82f6', '#ec4899', 
+      '#f97316', '#06b6d4', '#84cc16', '#6366f1', '#ef4444'
     ]
 
     const paths: { step: number; equity: number; isWin: boolean; drawdown: number }[][] = []
@@ -828,6 +822,51 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* Modal para Visualizar a Imagem do Gráfico */}
+      {viewingImageUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 max-w-4xl w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                📈 Visualização do Gráfico (TradingView)
+              </h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewingImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg transition font-medium"
+                >
+                  Abrir no Navegador ↗
+                </a>
+                <button
+                  onClick={() => setViewingImageUrl(null)}
+                  className="text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold px-3 py-1.5 rounded-lg transition"
+                >
+                  ✕ Fechar
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px] max-h-[75vh]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={viewingImageUrl}
+                alt="Gráfico da Operação"
+                className="max-w-full max-h-[70vh] object-contain rounded"
+                onError={(e) => {
+                  // Fallback visual caso o link seja um link comum do TradingView (que não é uma imagem direta .png/.jpg)
+                  (e.target as HTMLElement).style.display = 'none'
+                }}
+              />
+              <div className="absolute text-center p-6 text-slate-400 text-xs hidden data-[broken=true]:block" data-broken="false">
+                Este link pode ser uma página interativa do TradingView em vez de um arquivo direto de imagem. Clique em &quot;Abrir no Navegador&quot; acima para visualizá-lo perfeitamente.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreateWsModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1500,7 +1539,20 @@ export default function Home() {
                       {paginatedTrades.map((trade) => (
                         <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
                           <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
-                          <td className="p-3 font-bold text-slate-200">{trade.asset}</td>
+                          <td className="p-3 font-bold text-slate-200">
+                            <div className="flex items-center gap-1.5">
+                              <span>{trade.asset}</span>
+                              {trade.chart_url && (
+                                <button
+                                  onClick={() => setViewingImageUrl(trade.chart_url!)}
+                                  className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded transition font-medium"
+                                  title="Ver Imagem do Gráfico"
+                                >
+                                  📈 Gráfico
+                                </button>
+                              )}
+                            </div>
+                          </td>
                           <td className="p-3">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
                               {trade.direction}
