@@ -103,13 +103,13 @@ export default function Home() {
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   // --- Estados do Painel de Simulação de Monte Carlo Manual ---
-  const [mcInitialCapital, setMcInitialCapital] = useState('42') // Estilo S(0) base imagem
+  const [mcInitialCapital, setMcInitialCapital] = useState('42') 
   const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
-  const [mcRiskValue, setMcRiskValue] = useState('0.25') // Ajustado para o padrão de risco do usuário (0.25%)
+  const [mcRiskValue, setMcRiskValue] = useState('0.25') 
   const [mcWinRate, setMcWinRate] = useState('50') 
   const [mcPayoff, setMcPayoff] = useState('1.5') 
-  const [mcIterations, setMcIterations] = useState('45') // Dias (estilo imagem)
-  const [mcPathsCount, setMcPathsCount] = useState('20') // Caminhos simultâneos
+  const [mcIterations, setMcIterations] = useState('45') 
+  const [mcPathsCount, setMcPathsCount] = useState('20') 
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -170,7 +170,6 @@ export default function Home() {
     setLoadingTrades(false)
   }
 
-  // --- Função para Exportar Backup (Arquivo Local) ---
   function handleExportBackup() {
     const backupData = {
       exportDate: new Date().toISOString(),
@@ -188,7 +187,6 @@ export default function Home() {
     downloadAnchor.remove()
   }
 
-  // --- Função para Importar/Restaurar Backup ---
   async function handleImportBackup(e: React.ChangeEvent<HTMLInputElement>) {
     const fileReader = new FileReader()
     if (e.target.files && e.target.files[0]) {
@@ -490,9 +488,6 @@ export default function Home() {
     let maxWinningStreakGlobal = 0
     let maxLosingStreakGlobal = 0
 
-    // Cores vibrantes para destacar perfeitamente no fundo escuro
-    const colorPalette = ['#60a5fa', '#f87171', '#4ade80', '#c084fc', '#facc15', '#22d3ee', '#818cf8', '#fb7185', '#a3e635', '#e879f9']
-
     for (let p = 0; p < pathsCount; p++) {
       let currentCap = initialCap
       let pathDetails: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[] = [
@@ -503,8 +498,6 @@ export default function Home() {
 
       let currentWinStreak = 0
       let currentLossStreak = 0
-      let pathWins = 0
-      let pathLosses = 0
 
       for (let i = 1; i <= iterations; i++) {
         if (currentCap <= 0) {
@@ -520,7 +513,6 @@ export default function Home() {
         if (isWin) {
           tradePnl = riskAmount * payoff
           currentCap += tradePnl
-          pathWins++
           totalWinsAll++
           currentWinStreak++
           currentLossStreak = 0
@@ -528,7 +520,6 @@ export default function Home() {
         } else {
           tradePnl = -riskAmount
           currentCap -= riskAmount
-          pathLosses++
           totalLossesAll++
           currentLossStreak++
           currentWinStreak = 0
@@ -582,8 +573,7 @@ export default function Home() {
       totalLossesAll,
       maxWinningStreakGlobal,
       maxLosingStreakGlobal,
-      pathsCount,
-      colorPalette
+      pathsCount
     })
   }
 
@@ -744,7 +734,6 @@ export default function Home() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Botão de Navegação: Dashboard vs Teste de Monte Carlo */}
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -760,7 +749,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Botões de Backup e Restauração Local */}
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
               onClick={handleExportBackup}
@@ -902,7 +890,7 @@ export default function Home() {
                 🎲 Simulador de Teste de Monte Carlo
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Configure os parâmetros abaixo para gerar o passeio aleatório dos preços a partir de S(0).
+                Configure os parâmetros abaixo para gerar as simulações e visualizar o resultado em gráfico de barras.
               </p>
             </div>
 
@@ -1034,92 +1022,58 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* GRÁFICO COM FUNDO DA PÁGINA (bg-slate-900), GRADE SUAVE E LINHAS COLORIDAS */}
+                {/* GRÁFICO DE BARRAS (VOLTOU AO MODELO DE BARRAS) */}
                 <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2 text-slate-100 shadow-xl">
-                  {/* Título do Gráfico */}
                   <div className="text-center font-serif text-sm font-semibold tracking-wide text-slate-200 pb-1">
-                    Passeio aleatório dos preços a partir de S(0)
+                    Desempenho por Período / Barras de PnL Simulado (Caminho #1)
                   </div>
 
-                  {/* Container do Gráfico */}
-                  <div className="relative h-80 bg-slate-900 border border-slate-700 grid grid-cols-1 grid-rows-1 p-2 overflow-hidden rounded-lg">
-                    
-                    {/* Linhas de Grade Quadriculada Sutil para Fundo Escuro */}
-                    <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 pointer-events-none">
-                      {Array.from({ length: 36 }).map((_, i) => (
-                        <div key={i} className="border-r border-b border-slate-800/60" />
-                      ))}
+                  <div className="relative h-80 bg-slate-900 border border-slate-700 flex items-end justify-between gap-1 p-2 overflow-x-auto rounded-lg">
+                    {/* Linhas de grade horizontais de fundo */}
+                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-2">
+                      <div className="border-b border-slate-800/80 w-full" />
+                      <div className="border-b border-slate-800/80 w-full" />
+                      <div className="border-b border-slate-800/80 w-full" />
+                      <div className="border-b border-slate-800/80 w-full" />
                     </div>
 
-                    {/* Eixo Y Label */}
-                    <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 text-[11px] font-sans font-medium text-slate-400 tracking-wider">
-                      Preço
-                    </div>
+                    {(() => {
+                      const samplePath = mcResults.paths[0] || []
+                      const maxAbsPnl = Math.max(...samplePath.map((i: any) => Math.abs(i.pnl)), 1)
 
-                    {/* SVG para desenhar linhas contínuas suaves cruzando os pontos */}
-                    <svg className="absolute inset-12 right-4 bottom-8 top-4 w-[calc(100%-4rem)] h-[calc(100%-3rem)] overflow-visible">
-                      {(() => {
-                        const allPoints = mcResults.paths.flat().map((i: any) => i.capital)
-                        const maxVal = Math.max(...allPoints, mcResults.initialCap * 1.2)
-                        const minVal = Math.min(...allPoints, mcResults.initialCap * 0.8)
-                        const range = maxVal - minVal || 1
+                      return samplePath.map((point: any, index: number) => {
+                        const heightPercent = Math.min(Math.max((Math.abs(point.pnl) / maxAbsPnl) * 100, 4), 100)
+                        const isPositive = point.pnl >= 0
 
-                        return mcResults.paths.map((path: any[], idx: number) => {
-                          const strokeColor = mcResults.colorPalette[idx % mcResults.colorPalette.length]
+                        return (
+                          <div key={index} className="flex-1 flex flex-col items-center h-full justify-end relative group z-10 min-w-[10px]">
+                            {/* Tooltip ao passar o mouse */}
+                            <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col bg-slate-950 text-white text-[10px] p-2 rounded border border-slate-700 shadow-xl whitespace-nowrap z-30">
+                              <span><strong>Dia/Iteração:</strong> {point.step}</span>
+                              <span><strong>PnL:</strong> ${point.pnl.toFixed(2)}</span>
+                              <span><strong>Capital:</strong> ${point.capital.toFixed(2)}</span>
+                              <span><strong>Drawdown:</strong> {point.drawdown.toFixed(1)}%</span>
+                            </div>
 
-                          // Gerar string de pontos para o elemento <polyline> SVG
-                          const pointsString = path.map((point, pIdx) => {
-                            const x = (pIdx / (path.length - 1)) * 100
-                            const y = 100 - ((point.capital - minVal) / range) * 100
-                            return `${x}%,${y}%`
-                          }).join(' ')
-
-                          return (
-                            <g key={idx} className="group/line">
-                              {/* Linha Contínua Fluida */}
-                              <polyline
-                                fill="none"
-                                stroke={strokeColor}
-                                strokeWidth="1.5"
-                                strokeOpacity="0.85"
-                                points={pointsString}
-                                className="transition-all duration-200 hover:stroke-width-3 hover:stroke-white cursor-pointer"
-                              />
-
-                              {/* Pontos invisíveis maiores espalhados para tooltip ao passar o mouse */}
-                              {path.map((point, pIdx) => {
-                                const cx = (pIdx / (path.length - 1)) * 100
-                                const cy = 100 - ((point.capital - minVal) / range) * 100
-                                return (
-                                  <circle
-                                    key={pIdx}
-                                    cx={`${cx}%`}
-                                    cy={`${cy}%`}
-                                    r="4"
-                                    className="fill-transparent hover:fill-emerald-400 cursor-pointer group/point"
-                                  >
-                                    <title>{`Iteração/Dia #${point.step}\nPreço: $${point.capital.toFixed(2)}\nPnL do Ponto: $${point.pnl.toFixed(2)}\nDrawdown: ${point.drawdown.toFixed(1)}%`}</title>
-                                  </circle>
-                                )
-                              })}
-                            </g>
-                          )
-                        })
-                      })()}
-                    </svg>
-
-                    {/* Eixo X Label */}
-                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[11px] font-sans font-medium text-slate-400">
-                      Tempo (dias)
-                    </div>
+                            {/* Barra */}
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-t transition-all duration-150 ${
+                                isPositive ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-rose-500 hover:bg-rose-400'
+                              }`}
+                            />
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
 
                   <p className="text-[11px] text-slate-400 text-center italic">
-                    * Passe o mouse diretamente sobre as linhas ou pontos coloridos para ver os detalhes da iteração correspondente.
+                    * Passe o mouse sobre as barras para inspecionar os detalhes de cada iteração/período simulado.
                   </p>
                 </div>
 
-                {/* PAINEL DE RESUMO ESTATÍSTICO ABAIXO DO GRÁFICO */}
+                {/* PAINEL DE RESUMO ESTATÍSTICO */}
                 <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4">
                   <h4 className="text-sm font-bold text-white uppercase tracking-wider">📊 Resumo Estatístico Consolidado da Simulação</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1170,7 +1124,6 @@ export default function Home() {
         </main>
       ) : (
         <main className="max-w-7xl mx-auto mt-8 space-y-8">
-        {/* Filtro de Período Geral */}
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-white">📅 Filtro de Período:</span>
@@ -1230,7 +1183,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Cards Estatísticos Globais */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
             <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
@@ -1262,7 +1214,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Eficiência por Estratégia */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -1316,10 +1267,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Grade do Formulário e Histórico com ID para Scroll */}
         <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
           
-          {/* Formulário de Registro/Edição de Trades */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
@@ -1409,7 +1358,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Tabela de Histórico com Altura Fixa e Paginação */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
@@ -1468,7 +1416,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Guia de Paginação Embaixo */}
             <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/80 text-xs text-slate-400">
               <span>
                 Mostrando página <strong className="text-slate-200">{currentPage}</strong> de <strong className="text-slate-200">{totalPages}</strong> ({filteredTrades.length} registros)
@@ -1495,7 +1442,6 @@ export default function Home() {
 
         </div>
 
-        {/* CALENDÁRIO COM CLIQUE INTERATIVO */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
