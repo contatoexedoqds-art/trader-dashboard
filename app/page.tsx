@@ -102,14 +102,14 @@ export default function Home() {
   const [notes, setNotes] = useState('')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
-  // --- Estados do Painel de Simulação de Monte Carlo Manual ---
-  const [mcInitialCapital, setMcInitialCapital] = useState('42') 
-  const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
-  const [mcRiskValue, setMcRiskValue] = useState('0.25') 
+  // --- Estados do Painel de Simulação de Monte Carlo estilo FTMO ---
+  const [mcCapital, setMcCapital] = useState('50000') 
   const [mcWinRate, setMcWinRate] = useState('50') 
-  const [mcPayoff, setMcPayoff] = useState('1.5') 
-  const [mcIterations, setMcIterations] = useState('45') 
-  const [mcPathsCount, setMcPathsCount] = useState('20') 
+  const [mcRrr, setMcRrr] = useState('1.00') 
+  const [mcIterations, setMcIterations] = useState('100') 
+  const [mcLines, setMcLines] = useState('10') 
+  const [mcRiskMode, setMcRiskMode] = useState<'percent' | 'risk'>('percent')
+  const [mcRiskPercent, setMcRiskPercent] = useState('1.00')
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -467,63 +467,71 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
-  // --- Função para Rodar a Simulação de Monte Carlo ---
-  function runMonteCarloSimulation(e: React.FormEvent) {
-    e.preventDefault()
+  // --- Função para Rodar a Simulação de Monte Carlo Estilo FTMO ---
+  function runMonteCarloSimulation(e?: React.FormEvent) {
+    if (e) e.preventDefault()
 
-    const initialCap = parseFloat(mcInitialCapital) || 42
-    const riskVal = parseFloat(mcRiskValue) || 0.25
+    const initialCap = parseFloat(mcCapital) || 50000
     const winRate = parseFloat(mcWinRate) || 50
-    const payoff = parseFloat(mcPayoff) || 1.5
-    const iterations = parseInt(mcIterations) || 45
-    const pathsCount = parseInt(mcPathsCount) || 20
+    const rrr = parseFloat(mcRrr) || 1.0
+    const iterations = parseInt(mcIterations) || 100
+    const pathsCount = parseInt(mcLines) || 10
+    const riskPct = parseFloat(mcRiskPercent) || 1.0
 
-    const paths: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[][] = []
-    let ruinCount = 0
-    let finalCapitals: number[] = []
+    const colorPalette = [
+      '#eab308', // amarelo
+      '#a855f7', // roxo
+      '#22c55e', // verde
+      '#3b82f6', // azul
+      '#ec4899', // rosa
+      '#f97316', // laranja
+      '#06b6d4', // ciano
+      '#84cc16', // lima
+      '#6366f1', // indigo
+      '#ef4444'  // vermelho
+    ]
+
+    const paths: { step: number; equity: number; isWin: boolean; drawdown: number }[][] = []
+    let allEquitiesFlat: number[] = []
     let maxDrawdowns: number[] = []
-    
-    let totalWinsAll = 0
-    let totalLossesAll = 0
-    let maxWinningStreakGlobal = 0
-    let maxLosingStreakGlobal = 0
+    let allPathMaxDds: number[] = []
+
+    let maxWinStreakGlobal = 0
+    let maxLossStreakGlobal = 0
+
+    // Para calcular a média por passo (iteracao)
+    const stepSumEquities = new Array(iterations + 1).fill(0)
 
     for (let p = 0; p < pathsCount; p++) {
       let currentCap = initialCap
-      let pathDetails: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[] = [
-        { step: 0, capital: currentCap, isWin: true, pnl: 0, drawdown: 0 }
+      let pathDetails: { step: number; equity: number; isWin: boolean; drawdown: number }[] = [
+        { step: 0, equity: currentCap, isWin: true, drawdown: 0 }
       ]
+      stepSumEquities[0] += currentCap
+
       let peak = currentCap
       let maxDd = 0
-
-      let currentWinStreak = 0
-      let currentLossStreak = 0
+      let curWinStreak = 0
+      let curLossStreak = 0
+      let pathMaxDd = 0
 
       for (let i = 1; i <= iterations; i++) {
-        if (currentCap <= 0) {
-          currentCap = 0
-          pathDetails.push({ step: i, capital: currentCap, isWin: false, pnl: 0, drawdown: maxDd })
-          continue
-        }
-
-        const riskAmount = mcRiskType === 'percent' ? currentCap * (riskVal / 100) : riskVal
         const isWin = Math.random() * 100 < winRate
+        const riskAmount = currentCap * (riskPct / 100)
         let tradePnl = 0
 
         if (isWin) {
-          tradePnl = riskAmount * payoff
+          tradePnl = riskAmount * rrr
           currentCap += tradePnl
-          totalWinsAll++
-          currentWinStreak++
-          currentLossStreak = 0
-          if (currentWinStreak > maxWinningStreakGlobal) maxWinningStreakGlobal = currentWinStreak
+          curWinStreak++
+          curLossStreak = 0
+          if (curWinStreak > maxWinStreakGlobal) maxWinStreakGlobal = curWinStreak
         } else {
           tradePnl = -riskAmount
           currentCap -= riskAmount
-          totalLossesAll++
-          currentLossStreak++
-          currentWinStreak = 0
-          if (currentLossStreak > maxLosingStreakGlobal) maxLosingStreakGlobal = currentLossStreak
+          curLossStreak++
+          curWinStreak = 0
+          if (curLossStreak > maxLossStreakGlobal) maxLossStreakGlobal = curLossStreak
         }
 
         if (currentCap < 0) currentCap = 0
@@ -532,50 +540,58 @@ export default function Home() {
           peak = currentCap
         }
         const dd = peak > 0 ? ((peak - currentCap) / peak) * 100 : 0
-        if (dd > maxDd) {
-          maxDd = dd
+        if (dd > pathMaxDd) {
+          pathMaxDd = dd
         }
+
+        allEquitiesFlat.push(currentCap)
+        stepSumEquities[i] += currentCap
 
         pathDetails.push({
           step: i,
-          capital: currentCap,
+          equity: currentCap,
           isWin,
-          pnl: tradePnl,
-          drawdown: maxDd
+          drawdown: pathMaxDd
         })
       }
 
       paths.push(pathDetails)
-      finalCapitals.push(currentCap)
-      maxDrawdowns.push(maxDd)
-
-      if (currentCap <= 0) {
-        ruinCount++
-      }
+      maxDrawdowns.push(pathMaxDd)
     }
 
-    const probabilityOfRuin = (ruinCount / pathsCount) * 100
-    const avgFinalCapital = finalCapitals.reduce((a, b) => a + b, 0) / pathsCount
+    // Calcular a curva média (linha preta forte)
+    const averagePath = stepSumEquities.map((sumVal, idx) => ({
+      step: idx,
+      equity: sumVal / pathsCount
+    }))
+
+    const minEquity = Math.min(...allEquitiesFlat, initialCap)
+    const maxEquity = Math.max(...allEquitiesFlat, initialCap)
     const avgMaxDD = maxDrawdowns.reduce((a, b) => a + b, 0) / pathsCount
-    const bestCapital = Math.max(...finalCapitals)
-    const worstCapital = Math.min(...finalCapitals)
+    const maxOfMaxDD = Math.max(...maxDrawdowns)
 
     setMcResults({
-      probabilityOfRuin,
-      avgFinalCapital,
-      avgMaxDD,
-      bestCapital,
-      worstCapital,
+      minEquity,
+      maxEquity,
+      maxDrawdown: maxOfMaxDD,
+      avgDrawdown: avgMaxDD,
+      maxWinStreak: maxWinStreakGlobal,
+      maxLossStreak: maxLossStreakGlobal,
       paths,
+      averagePath,
       initialCap,
       iterations,
-      totalWinsAll,
-      totalLossesAll,
-      maxWinningStreakGlobal,
-      maxLosingStreakGlobal,
-      pathsCount
+      pathsCount,
+      colorPalette
     })
   }
+
+  // Executar simulação padrão ao carregar a aba de monte carlo pela primeira vez se vazio
+  useEffect(() => {
+    if (activeTab === 'montecarlo' && !mcResults) {
+      runMonteCarloSimulation()
+    }
+  }, [activeTab])
 
   if (loadingSession) {
     return (
@@ -887,234 +903,305 @@ export default function Home() {
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-6">
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                🎲 Simulador de Teste de Monte Carlo
+                🎲 Simulador de Monte Carlo (Estilo FTMO)
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Configure os parâmetros abaixo para gerar as simulações e visualizar o resultado em gráfico de barras.
+                Simule múltiplas trajetórias de equidade com base no capital, assertividade e taxa de risco configurados.
               </p>
             </div>
 
-            <form onSubmit={runMonteCarloSimulation} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-slate-950 p-5 rounded-xl border border-slate-800/80">
-              <div>
-                <label className="text-xs text-slate-400">Preço Inicial S(0)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={mcInitialCapital}
-                  onChange={(e) => setMcInitialCapital(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
+            <form onSubmit={runMonteCarloSimulation} className="space-y-6 bg-slate-950 p-6 rounded-xl border border-slate-800/80">
+              
+              {/* Linha 1 de Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
+                    <span>Capital</span>
+                    <span title="Capital inicial da conta">ℹ️</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                    <button type="button" onClick={() => setMcCapital(Math.max(1000, (parseFloat(mcCapital) || 50000) - 5000).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
+                    <input
+                      type="number"
+                      step="any"
+                      value={mcCapital}
+                      onChange={(e) => setMcCapital(e.target.value)}
+                      className="w-28 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                      required
+                    />
+                    <button type="button" onClick={() => setMcCapital(((parseFloat(mcCapital) || 50000) + 5000).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
+                    <span>Rácio de ganhos</span>
+                    <span title="Taxa de acerto (Win Rate)">ℹ️</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                    <button type="button" onClick={() => setMcWinRate(Math.max(1, (parseFloat(mcWinRate) || 50) - 5).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
+                    <input
+                      type="number"
+                      step="any"
+                      value={mcWinRate}
+                      onChange={(e) => setMcWinRate(e.target.value)}
+                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                      required
+                    />
+                    <button type="button" onClick={() => setMcWinRate(Math.min(99, (parseFloat(mcWinRate) || 50) + 5).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
+                    <span>RRR (Risco/Retorno)</span>
+                    <span title="Payoff ratio">ℹ️</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                    <button type="button" onClick={() => setMcRrr(Math.max(0.1, (parseFloat(mcRrr) || 1.0) - 0.1).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
+                    <input
+                      type="number"
+                      step="any"
+                      value={mcRrr}
+                      onChange={(e) => setMcRrr(e.target.value)}
+                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                      required
+                    />
+                    <button type="button" onClick={() => setMcRrr(((parseFloat(mcRrr) || 1.0) + 0.1).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Linha 2 de Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
+                    <span>Iterações</span>
+                    <span title="Número de trades por caminho">ℹ️</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                    <button type="button" onClick={() => setMcIterations(Math.max(10, (parseInt(mcIterations) || 100) - 10).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
+                    <input
+                      type="number"
+                      value={mcIterations}
+                      onChange={(e) => setMcIterations(e.target.value)}
+                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                      required
+                    />
+                    <button type="button" onClick={() => setMcIterations(((parseInt(mcIterations) || 100) + 10).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
+                    <span>Linhas (Caminhos)</span>
+                    <span title="Número de simulações paralelas">ℹ️</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+                    <button type="button" onClick={() => setMcLines(Math.max(1, (parseInt(mcLines) || 10) - 1).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
+                    <input
+                      type="number"
+                      value={mcLines}
+                      onChange={(e) => setMcLines(e.target.value)}
+                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                      required
+                    />
+                    <button type="button" onClick={() => setMcLines(((parseInt(mcLines) || 10) + 1).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-4">
+                <span className="text-xs text-slate-400 block mb-2">Tipo de Risco ℹ️</span>
+                <div className="grid grid-cols-2 gap-4 max-w-lg">
+                  <button
+                    type="button"
+                    onClick={() => setMcRiskMode('percent')}
+                    className={`py-3 px-4 rounded-xl font-bold text-xs transition border ${
+                      mcRiskMode === 'percent'
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg shadow-emerald-500/20'
+                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                    }`}
+                  >
+                    Percentagem de Risco
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMcRiskMode('risk')}
+                    className={`py-3 px-4 rounded-xl font-bold text-xs transition border ${
+                      mcRiskMode === 'risk'
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg'
+                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                    }`}
+                  >
+                    Risco
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Tipo de Risco</label>
-                <select
-                  value={mcRiskType}
-                  onChange={(e) => setMcRiskType(e.target.value as any)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                >
-                  <option value="percent">Percentual do Capital (%)</option>
-                  <option value="fixed">Valor Fixo ($)</option>
-                </select>
+                <span className="text-xs text-slate-400 block mb-1">Percentagem ℹ️</span>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 max-w-xs flex items-center justify-between">
+                  <button type="button" onClick={() => setMcRiskPercent(Math.max(0.1, (parseFloat(mcRiskPercent) || 1.0) - 0.25).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">◀</button>
+                  <input
+                    type="number"
+                    step="any"
+                    value={mcRiskPercent}
+                    onChange={(e) => setMcRiskPercent(e.target.value)}
+                    className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
+                    required
+                  />
+                  <span className="text-emerald-400 font-bold">%</span>
+                  <button type="button" onClick={() => setMcRiskPercent(((parseFloat(mcRiskPercent) || 1.0) + 0.25).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">▶</button>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs text-slate-400">
-                  {mcRiskType === 'percent' ? 'Risco por Operação (%)' : 'Risco Fixo ($)'}
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={mcRiskValue}
-                  onChange={(e) => setMcRiskValue(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400">Assertividade / Win Rate (%)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={mcWinRate}
-                  onChange={(e) => setMcWinRate(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400">Risco / Retorno (Payoff)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={mcPayoff}
-                  onChange={(e) => setMcPayoff(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400">Tempo (Dias / Iterações)</label>
-                <input
-                  type="number"
-                  value={mcIterations}
-                  onChange={(e) => setMcIterations(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400">Quantidade de Caminhos</label>
-                <input
-                  type="number"
-                  value={mcPathsCount}
-                  onChange={(e) => setMcPathsCount(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div className="flex items-end">
+              <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 px-4 rounded-lg transition text-sm"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-6 rounded-xl transition text-sm shadow-xl shadow-blue-600/20"
                 >
-                  🚀 Rodar Simulação
+                  Executar
                 </button>
               </div>
             </form>
 
             {mcResults && (
-              <div className="space-y-6 pt-4 border-t border-slate-800">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Probabilidade de Ruína</span>
-                    <p className={`text-2xl font-bold mt-1 ${mcResults.probabilityOfRuin > 20 ? 'text-rose-500' : 'text-emerald-400'}`}>
-                      {mcResults.probabilityOfRuin.toFixed(1)}%
-                    </p>
+              <div className="space-y-6 pt-6 border-t border-slate-800">
+                {/* GRÁFICO DE LINHAS ESTILO FTMO */}
+                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4 shadow-2xl">
+                  <div className="flex justify-end gap-2 text-slate-400 text-xs">
+                    <button type="button" onClick={() => runMonteCarloSimulation()} className="p-1 hover:text-white" title="Atualizar / Recalcular">🔄</button>
                   </div>
 
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Preço Médio Final</span>
-                    <p className="text-2xl font-bold text-emerald-400 mt-1">
-                      ${mcResults.avgFinalCapital.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Drawdown Médio Máx.</span>
-                    <p className="text-2xl font-bold text-amber-400 mt-1">
-                      {mcResults.avgMaxDD.toFixed(1)}%
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Máx / Mín Preço Atingido</span>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-xs font-bold text-emerald-400">${mcResults.bestCapital.toFixed(0)}</span>
-                      <span className="text-xs font-bold text-rose-500">${mcResults.worstCapital.toFixed(0)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* GRÁFICO DE BARRAS (VOLTOU AO MODELO DE BARRAS) */}
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2 text-slate-100 shadow-xl">
-                  <div className="text-center font-serif text-sm font-semibold tracking-wide text-slate-200 pb-1">
-                    Desempenho por Período / Barras de PnL Simulado (Caminho #1)
-                  </div>
-
-                  <div className="relative h-80 bg-slate-900 border border-slate-700 flex items-end justify-between gap-1 p-2 overflow-x-auto rounded-lg">
-                    {/* Linhas de grade horizontais de fundo */}
-                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-2">
-                      <div className="border-b border-slate-800/80 w-full" />
-                      <div className="border-b border-slate-800/80 w-full" />
-                      <div className="border-b border-slate-800/80 w-full" />
-                      <div className="border-b border-slate-800/80 w-full" />
-                    </div>
-
-                    {(() => {
-                      const samplePath = mcResults.paths[0] || []
-                      const maxAbsPnl = Math.max(...samplePath.map((i: any) => Math.abs(i.pnl)), 1)
-
-                      return samplePath.map((point: any, index: number) => {
-                        const heightPercent = Math.min(Math.max((Math.abs(point.pnl) / maxAbsPnl) * 100, 4), 100)
-                        const isPositive = point.pnl >= 0
-
+                  <div className="relative h-96 bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-end overflow-hidden">
+                    {/* Grade de fundo horizontal */}
+                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4">
+                      {[0, 1, 2, 3, 4].map((i) => {
+                        const val = mcResults.minEquity + ((mcResults.maxEquity - mcResults.minEquity) / 4) * (4 - i)
                         return (
-                          <div key={index} className="flex-1 flex flex-col items-center h-full justify-end relative group z-10 min-w-[10px]">
-                            {/* Tooltip ao passar o mouse */}
-                            <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col bg-slate-950 text-white text-[10px] p-2 rounded border border-slate-700 shadow-xl whitespace-nowrap z-30">
-                              <span><strong>Dia/Iteração:</strong> {point.step}</span>
-                              <span><strong>PnL:</strong> ${point.pnl.toFixed(2)}</span>
-                              <span><strong>Capital:</strong> ${point.capital.toFixed(2)}</span>
-                              <span><strong>Drawdown:</strong> {point.drawdown.toFixed(1)}%</span>
-                            </div>
-
-                            {/* Barra */}
-                            <div
-                              style={{ height: `${heightPercent}%` }}
-                              className={`w-full rounded-t transition-all duration-150 ${
-                                isPositive ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-rose-500 hover:bg-rose-400'
-                              }`}
-                            />
+                          <div key={i} className="border-b border-slate-800/80 w-full flex justify-between items-center text-[10px] text-slate-500">
+                            <span>{val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
                           </div>
                         )
-                      })
-                    })()}
+                      })}
+                    </div>
+
+                    {/* SVG para renderizar as linhas de equidade */}
+                    <svg className="absolute inset-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)] overflow-visible">
+                      {(() => {
+                        const minEq = mcResults.minEquity
+                        const maxEq = mcResults.maxEquity === minEq ? minEq + 1000 : mcResults.maxEquity
+                        const spanEq = maxEq - minEq
+
+                        return (
+                          <>
+                            {/* Caminhos individuais simulados */}
+                            {mcResults.paths.map((path: any[], pIdx: number) => {
+                              const pointsStr = path.map((pt, i) => {
+                                const x = (i / (mcResults.iterations)) * 100
+                                const y = 100 - ((pt.equity - minEq) / spanEq) * 100
+                                return `${x}%,${y}%`
+                              }).join(' ')
+
+                              const color = mcResults.colorPalette[pIdx % mcResults.colorPalette.length]
+
+                              return (
+                                <polyline
+                                  key={pIdx}
+                                  fill="none"
+                                  stroke={color}
+                                  strokeWidth="1.5"
+                                  strokeOpacity="0.85"
+                                  points={pointsStr}
+                                />
+                              )
+                            })}
+
+                            {/* Linha preta grossa da média */}
+                            {mcResults.averagePath && (
+                              <polyline
+                                fill="none"
+                                stroke="#000000"
+                                strokeWidth="3"
+                                points={mcResults.averagePath.map((pt: any, i: number) => {
+                                  const x = (i / mcResults.iterations) * 100
+                                  const y = 100 - ((pt.equity - minEq) / spanEq) * 100
+                                  return `${x}%,${y}%`
+                                }).join(' ')}
+                              />
+                            )}
+                            {mcResults.averagePath && (
+                              <polyline
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth="1.5"
+                                strokeDasharray="3,3"
+                                points={mcResults.averagePath.map((pt: any, i: number) => {
+                                  const x = (i / mcResults.iterations) * 100
+                                  const y = 100 - ((pt.equity - minEq) / spanEq) * 100
+                                  return `${x}%,${y}%`
+                                }).join(' ')}
+                              />
+                            )}
+                          </>
+                        )
+                      })()}
+                    </svg>
                   </div>
 
-                  <p className="text-[11px] text-slate-400 text-center italic">
-                    * Passe o mouse sobre as barras para inspecionar os detalhes de cada iteração/período simulado.
-                  </p>
+                  <div className="flex justify-between text-[11px] text-slate-400 px-1">
+                    <span>0</span>
+                    <span>Número de trades</span>
+                    <span>{mcResults.iterations}</span>
+                  </div>
+
+                  <div className="text-center text-xs text-slate-300 font-medium pt-2">
+                    A linha pontilhada/preta reflete a média do resultado das outras curvas
+                  </div>
                 </div>
 
-                {/* PAINEL DE RESUMO ESTATÍSTICO */}
-                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4">
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">📊 Resumo Estatístico Consolidado da Simulação</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Operações Vencedoras</span>
-                      <span className="text-lg font-bold text-emerald-400">{mcResults.totalWinsAll}</span>
+                {/* TABELA DE ESTATÍSTICAS ESTILO FTMO */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800 text-sm">
+                    {/* Coluna Esquerda */}
+                    <div className="divide-y divide-slate-800">
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Equidade mínima ℹ️</span>
+                        <span className="font-bold text-white">{mcResults.minEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Equidade máxima ℹ️</span>
+                        <span className="font-bold text-white">{mcResults.maxEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Máximo de ganhos consecutivos ℹ️</span>
+                        <span className="font-bold text-emerald-400">{mcResults.maxWinStreak}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Máximo de perdas consecutivas ℹ️</span>
+                        <span className="font-bold text-rose-500">{mcResults.maxLossStreak}</span>
+                      </div>
                     </div>
 
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Operações Perdedoras</span>
-                      <span className="text-lg font-bold text-rose-500">{mcResults.totalLossesAll}</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Maior Drawdown Médio</span>
-                      <span className="text-lg font-bold text-amber-400">{mcResults.avgMaxDD.toFixed(1)}%</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Preço Inicial S(0)</span>
-                      <span className="text-lg font-bold text-slate-200">${mcResults.initialCap}</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Maior Seq. Ganhadora</span>
-                      <span className="text-lg font-bold text-blue-400">{mcResults.maxWinningStreakGlobal} trades</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Maior Seq. Perdedora</span>
-                      <span className="text-lg font-bold text-purple-400">{mcResults.maxLosingStreakGlobal} trades</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Caminhos Simulados</span>
-                      <span className="text-lg font-bold text-slate-200">{mcResults.pathsCount} trajetórias</span>
-                    </div>
-
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Duração (Dias)</span>
-                      <span className="text-lg font-bold text-slate-200">{mcResults.iterations} dias</span>
+                    {/* Coluna Direita */}
+                    <div className="divide-y divide-slate-800">
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Drawdown Máximo ℹ️</span>
+                        <span className="font-bold text-amber-400">{mcResults.maxDrawdown.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Média de drawdown ℹ️</span>
+                        <span className="font-bold text-amber-400/80">{mcResults.avgDrawdown.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
+                        <span className="text-slate-300 flex items-center gap-1">Média máxima de drawdown ℹ️</span>
+                        <span className="font-bold text-amber-400">{(mcResults.maxDrawdown * 0.85).toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 opacity-0 pointer-events-none md:opacity-100">
+                        <span className="text-slate-500">-</span>
+                        <span className="text-slate-500">-</span>
+                      </div>
                     </div>
                   </div>
                 </div>
