@@ -494,7 +494,6 @@ export default function Home() {
     const paths: { step: number; equity: number; isWin: boolean; drawdown: number }[][] = []
     let allEquitiesFlat: number[] = []
     let maxDrawdowns: number[] = []
-    let allPathMaxDds: number[] = []
 
     let maxWinStreakGlobal = 0
     let maxLossStreakGlobal = 0
@@ -510,7 +509,6 @@ export default function Home() {
       stepSumEquities[0] += currentCap
 
       let peak = currentCap
-      let maxDd = 0
       let curWinStreak = 0
       let curLossStreak = 0
       let pathMaxDd = 0
@@ -559,7 +557,7 @@ export default function Home() {
       maxDrawdowns.push(pathMaxDd)
     }
 
-    // Calcular a curva média (linha preta forte)
+    // Calcular a curva média
     const averagePath = stepSumEquities.map((sumVal, idx) => ({
       step: idx,
       equity: sumVal / pathsCount
@@ -917,7 +915,6 @@ export default function Home() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
                     <span>Capital</span>
-                    <span title="Capital inicial da conta">ℹ️</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
                     <button type="button" onClick={() => setMcCapital(Math.max(1000, (parseFloat(mcCapital) || 50000) - 5000).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
@@ -936,7 +933,6 @@ export default function Home() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
                     <span>Rácio de ganhos</span>
-                    <span title="Taxa de acerto (Win Rate)">ℹ️</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
                     <button type="button" onClick={() => setMcWinRate(Math.max(1, (parseFloat(mcWinRate) || 50) - 5).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
@@ -955,7 +951,6 @@ export default function Home() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
                     <span>RRR (Risco/Retorno)</span>
-                    <span title="Payoff ratio">ℹ️</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
                     <button type="button" onClick={() => setMcRrr(Math.max(0.1, (parseFloat(mcRrr) || 1.0) - 0.1).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
@@ -977,7 +972,6 @@ export default function Home() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
                     <span>Iterações</span>
-                    <span title="Número de trades por caminho">ℹ️</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
                     <button type="button" onClick={() => setMcIterations(Math.max(10, (parseInt(mcIterations) || 100) - 10).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
@@ -995,7 +989,6 @@ export default function Home() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
                     <span>Linhas (Caminhos)</span>
-                    <span title="Número de simulações paralelas">ℹ️</span>
                   </div>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
                     <button type="button" onClick={() => setMcLines(Math.max(1, (parseInt(mcLines) || 10) - 1).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
@@ -1012,7 +1005,7 @@ export default function Home() {
               </div>
 
               <div className="border-t border-slate-800 pt-4">
-                <span className="text-xs text-slate-400 block mb-2">Tipo de Risco ℹ️</span>
+                <span className="text-xs text-slate-400 block mb-2">Tipo de Risco</span>
                 <div className="grid grid-cols-2 gap-4 max-w-lg">
                   <button
                     type="button"
@@ -1040,7 +1033,7 @@ export default function Home() {
               </div>
 
               <div>
-                <span className="text-xs text-slate-400 block mb-1">Percentagem ℹ️</span>
+                <span className="text-xs text-slate-400 block mb-1">Percentagem</span>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 max-w-xs flex items-center justify-between">
                   <button type="button" onClick={() => setMcRiskPercent(Math.max(0.1, (parseFloat(mcRiskPercent) || 1.0) - 0.25).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">◀</button>
                   <input
@@ -1074,7 +1067,7 @@ export default function Home() {
                     <button type="button" onClick={() => runMonteCarloSimulation()} className="p-1 hover:text-white" title="Atualizar / Recalcular">🔄</button>
                   </div>
 
-                  <div className="relative h-96 bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-end overflow-hidden">
+                  <div className="relative h-96 bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-end">
                     {/* Grade de fundo horizontal */}
                     <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4">
                       {[0, 1, 2, 3, 4].map((i) => {
@@ -1088,7 +1081,7 @@ export default function Home() {
                     </div>
 
                     {/* SVG para renderizar as linhas de equidade */}
-                    <svg className="absolute inset-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)] overflow-visible">
+                    <svg className="absolute inset-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)]">
                       {(() => {
                         const minEq = mcResults.minEquity
                         const maxEq = mcResults.maxEquity === minEq ? minEq + 1000 : mcResults.maxEquity
@@ -1099,7 +1092,7 @@ export default function Home() {
                             {/* Caminhos individuais simulados */}
                             {mcResults.paths.map((path: any[], pIdx: number) => {
                               const pointsStr = path.map((pt, i) => {
-                                const x = (i / (mcResults.iterations)) * 100
+                                const x = (i / mcResults.iterations) * 100
                                 const y = 100 - ((pt.equity - minEq) / spanEq) * 100
                                 return `${x}%,${y}%`
                               }).join(' ')
@@ -1167,19 +1160,19 @@ export default function Home() {
                     {/* Coluna Esquerda */}
                     <div className="divide-y divide-slate-800">
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Equidade mínima ℹ️</span>
+                        <span className="text-slate-300">Equidade mínima</span>
                         <span className="font-bold text-white">{mcResults.minEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Equidade máxima ℹ️</span>
+                        <span className="text-slate-300">Equidade máxima</span>
                         <span className="font-bold text-white">{mcResults.maxEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Máximo de ganhos consecutivos ℹ️</span>
+                        <span className="text-slate-300">Máximo de ganhos consecutivos</span>
                         <span className="font-bold text-emerald-400">{mcResults.maxWinStreak}</span>
                       </div>
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Máximo de perdas consecutivas ℹ️</span>
+                        <span className="text-slate-300">Máximo de perdas consecutivas</span>
                         <span className="font-bold text-rose-500">{mcResults.maxLossStreak}</span>
                       </div>
                     </div>
@@ -1187,15 +1180,15 @@ export default function Home() {
                     {/* Coluna Direita */}
                     <div className="divide-y divide-slate-800">
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Drawdown Máximo ℹ️</span>
+                        <span className="text-slate-300">Drawdown Máximo</span>
                         <span className="font-bold text-amber-400">{mcResults.maxDrawdown.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Média de drawdown ℹ️</span>
+                        <span className="text-slate-300">Média de drawdown</span>
                         <span className="font-bold text-amber-400/80">{mcResults.avgDrawdown.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300 flex items-center gap-1">Média máxima de drawdown ℹ️</span>
+                        <span className="text-slate-300">Média máxima de drawdown</span>
                         <span className="font-bold text-amber-400">{(mcResults.maxDrawdown * 0.85).toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between items-center p-4 opacity-0 pointer-events-none md:opacity-100">
