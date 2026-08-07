@@ -158,6 +158,95 @@ export default function Home() {
     setLoadingTrades(false)
   }
 
+  // --- Função para Exportar Backup (Arquivo Local) ---
+  function handleExportBackup() {
+    const backupData = {
+      exportDate: new Date().toISOString(),
+      workspaces,
+      strategies,
+      trades
+    }
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2))
+    const downloadAnchor = document.createElement('a')
+    downloadAnchor.setAttribute("href", dataStr)
+    downloadAnchor.setAttribute("download", `trader_backup_${format(new Date(), 'yyyy-MM-dd')}.json`)
+    document.body.appendChild(downloadAnchor)
+    downloadAnchor.click()
+    downloadAnchor.remove()
+  }
+
+  // --- Função para Importar/Restaurar Backup ---
+  async function handleImportBackup(e: React.ChangeEvent<HTMLInputElement>) {
+    const fileReader = new FileReader()
+    if (e.target.files && e.target.files[0]) {
+      fileReader.readAsText(e.target.files[0], "UTF-8")
+      fileReader.onload = async (event) => {
+        try {
+          const parsedData = JSON.parse(event.target?.result as string)
+          if (!parsedData.trades || !parsedData.workspaces) {
+            alert('Arquivo de backup inválido!')
+            return
+          }
+
+          if (confirm(`Deseja restaurar o backup? Isso irá inserir ${parsedData.trades.length} operações e ${parsedData.workspaces.length} workspaces na sua conta atual.`)) {
+            setLoadingTrades(true)
+
+            // Restaurar Workspaces
+            for (const ws of parsedData.workspaces) {
+              await supabase.from('workspaces').upsert({
+                id: ws.id,
+                name: ws.name,
+                initial_capital: ws.initial_capital,
+                user_id: session.user.id
+              })
+            }
+
+            // Restaurar Strategies
+            if (parsedData.strategies) {
+              for (const st of parsedData.strategies) {
+                await supabase.from('strategies').upsert({
+                  id: st.id,
+                  name: st.name,
+                  user_id: session.user.id
+                })
+              }
+            }
+
+            // Restaurar Trades
+            for (const t of parsedData.trades) {
+              await supabase.from('trades').upsert({
+                id: t.id,
+                workspace_id: t.workspace_id,
+                user_id: session.user.id,
+                asset: t.asset,
+                direction: t.direction,
+                strategy_name: t.strategy_name,
+                entry_price: t.entry_price,
+                stop_loss: t.stop_loss,
+                take_profit: t.take_profit,
+                pnl: t.pnl,
+                r_multiple: t.r_multiple,
+                result_type: t.result_type,
+                chart_url: t.chart_url,
+                notes: t.notes,
+                trade_date: t.trade_date
+              })
+            }
+
+            await fetchData()
+            alert('Backup restaurado com sucesso!')
+          }
+        } catch (error: any) {
+          alert('Erro ao ler arquivo de backup: ' + error.message)
+        } finally {
+          setLoadingTrades(false)
+          e.target.value = ''
+        }
+      }
+    }
+  }
+
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault()
     setAuthError('')
@@ -528,6 +617,21 @@ export default function Home() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botões de Backup e Restauração Local */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <button
+              onClick={handleExportBackup}
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition font-medium"
+              title="Salvar dados em arquivo JSON no computador"
+            >
+              💾 Salvar Backup
+            </button>
+            <label className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition font-medium cursor-pointer" title="Restaurar dados de um arquivo JSON">
+              📂 Restaurar
+              <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
+            </label>
+          </div>
+
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <span className="text-xs text-slate-400 px-2 font-medium">Workspace:</span>
             <select
