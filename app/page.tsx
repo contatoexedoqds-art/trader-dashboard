@@ -111,7 +111,7 @@ export default function Home() {
   const [mcIterations, setMcIterations] = useState('100') 
   const [mcLines, setMcLines] = useState('10') 
   const [mcRiskMode, setMcRiskMode] = useState<'percent' | 'risk'>('percent')
-  const [mcRiskPercent, setMcRiskPercent] = useState('1.00')
+  const [mcRiskPercent, setMcRiskPercent] = useState('0.25') // Atualizado para refletir o risco por operação correto de 0.25%
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -495,7 +495,7 @@ export default function Home() {
     const rrr = parseFloat(mcRrr) || 1.0
     const iterations = parseInt(mcIterations) || 100
     const pathsCount = parseInt(mcLines) || 10
-    const riskPct = parseFloat(mcRiskPercent) || 1.0
+    const riskPct = parseFloat(mcRiskPercent) || 0.25
 
     const colorPalette = [
       '#eab308', // amarelo
@@ -1064,7 +1064,7 @@ export default function Home() {
               <div>
                 <span className="text-xs text-slate-400 block mb-1">Percentagem</span>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 max-w-xs flex items-center justify-between">
-                  <button type="button" onClick={() => setMcRiskPercent(Math.max(0.1, (parseFloat(mcRiskPercent) || 1.0) - 0.25).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">◀</button>
+                  <button type="button" onClick={() => setMcRiskPercent(Math.max(0.01, (parseFloat(mcRiskPercent) || 0.25) - 0.05).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">◀</button>
                   <input
                     type="number"
                     step="any"
@@ -1074,7 +1074,7 @@ export default function Home() {
                     required
                   />
                   <span className="text-emerald-400 font-bold">%</span>
-                  <button type="button" onClick={() => setMcRiskPercent(((parseFloat(mcRiskPercent) || 1.0) + 0.25).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">▶</button>
+                  <button type="button" onClick={() => setMcRiskPercent(((parseFloat(mcRiskPercent) || 0.25) + 0.05).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">▶</button>
                 </div>
               </div>
 
