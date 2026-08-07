@@ -8,11 +8,10 @@ import {
   endOfMonth,
   eachDayOfInterval,
   isSameMonth,
-  isSameDay,
-  addMonths,
+  parseISO,
   subMonths,
-  getDay,
-  parseISO
+  addMonths,
+  getDay
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -713,102 +712,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CALENDÁRIO ESTILO TRADER LEZELLA */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                📆 Calendário de Desempenho
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Visão mensal estilo Trader Lezella com diário de lucros e operações por dia.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                Mês: ${monthlyPnl.toFixed(2)}
-              </span>
-
-              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
-                <button
-                  onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
-                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                >
-                  ◀
-                </button>
-                <span className="text-xs font-bold text-slate-200 px-2 capitalize">
-                  {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
-                </span>
-                <button
-                  onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
-                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                >
-                  ▶
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Grid do Calendário */}
-          <div className="grid grid-cols-7 gap-1 md:gap-2">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-              <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
-                {day}
-              </div>
-            ))}
-
-            {/* Células vazias para alinhar o primeiro dia do mês */}
-            {Array.from({ length: startDayOfWeek }).map((_, index) => (
-              <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
-            ))}
-
-            {/* Dias do Mês */}
-            {daysInMonth.map((day) => {
-              const formattedDate = format(day, 'yyyy-MM-dd')
-              const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
-              const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
-              const hasTrades = dayTrades.length > 0
-
-              return (
-                <div
-                  key={formattedDate}
-                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative ${
-                    hasTrades
-                      ? dayPnl > 0
-                        ? 'bg-emerald-950/20 border-emerald-500/30'
-                        : dayPnl < 0
-                        ? 'bg-rose-950/20 border-rose-500/30'
-                        : 'bg-slate-900 border-slate-800'
-                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600'
-                  }`}
-                >
-                  <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
-
-                  {hasTrades && (
-                    <div className="mt-1">
-                      <span
-                        className={`text-xs md:text-sm font-bold block ${
-                          dayPnl > 0
-                            ? 'text-emerald-400'
-                            : dayPnl < 0
-                            ? 'text-rose-500'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        ${dayPnl.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium block">
-                        {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
         {/* Eficiência por Estratégia */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
           <div className="flex items-center justify-between">
@@ -861,6 +764,7 @@ export default function Home() {
           )}
         </div>
 
+        {/* Formulário e Tabela de Operações */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Form de Cadastro / Edição */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4 h-fit">
@@ -1166,6 +1070,102 @@ export default function Home() {
                 </table>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* CALENDÁRIO ESTILO TRADER LEZELLA (Posicionado no Final) */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                📆 Calendário de Desempenho
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Visão mensal estilo Trader Lezella com diário de lucros e operações por dia.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                Mês: ${monthlyPnl.toFixed(2)}
+              </span>
+
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                <button
+                  onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ◀
+                </button>
+                <span className="text-xs font-bold text-slate-200 px-2 capitalize">
+                  {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <button
+                  onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ▶
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid do Calendário */}
+          <div className="grid grid-cols-7 gap-1 md:gap-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
+                {day}
+              </div>
+            ))}
+
+            {/* Células vazias para alinhar o primeiro dia do mês */}
+            {Array.from({ length: startDayOfWeek }).map((_, index) => (
+              <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
+            ))}
+
+            {/* Dias do Mês */}
+            {daysInMonth.map((day) => {
+              const formattedDate = format(day, 'yyyy-MM-dd')
+              const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
+              const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+              const hasTrades = dayTrades.length > 0
+
+              return (
+                <div
+                  key={formattedDate}
+                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative ${
+                    hasTrades
+                      ? dayPnl > 0
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : dayPnl < 0
+                        ? 'bg-rose-950/20 border-rose-500/30'
+                        : 'bg-slate-900 border-slate-800'
+                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600'
+                  }`}
+                >
+                  <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
+
+                  {hasTrades && (
+                    <div className="mt-1">
+                      <span
+                        className={`text-xs md:text-sm font-bold block ${
+                          dayPnl > 0
+                            ? 'text-emerald-400'
+                            : dayPnl < 0
+                            ? 'text-rose-500'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        ${dayPnl.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block">
+                        {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       </main>
