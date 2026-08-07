@@ -45,7 +45,7 @@ interface Trade {
   chart_url?: string
   notes?: string
   trade_date: string
-  followed_plan?: string // Novo campo adicionado
+  followed_plan?: string
   created_at?: string
 }
 
@@ -101,7 +101,7 @@ export default function Home() {
   const [chartUrl, setChartUrl] = useState('')
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
-  const [followedPlan, setFollowedPlan] = useState('DENTRO') // Novo estado do formulário ('DENTRO' ou 'FORA')
+  const [followedPlan, setFollowedPlan] = useState('DENTRO')
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   // --- Estados do Painel de Simulação de Monte Carlo estilo FTMO ---
@@ -328,9 +328,22 @@ export default function Home() {
       setStrategies([...strategies, data[0]])
       setStrategyName(data[0].name)
       setNewStrategyName('')
-      setShowCreateStratModal(false)
     } else {
       alert('Erro ao criar estratégia: ' + error?.message)
+    }
+  }
+
+  async function handleDeleteStrategy(stratId: string, stratName: string) {
+    if (confirm(`Tem certeza que deseja excluir a estratégia "${stratName}"? (As operações já salvas com ela não serão apagadas, apenas o setup)`)) {
+      const { error } = await supabase.from('strategies').delete().eq('id', stratId)
+      if (!error) {
+        setStrategies(strategies.filter(s => s.id !== stratId))
+        if (strategyName === stratName) {
+          setStrategyName('')
+        }
+      } else {
+        alert('Erro ao excluir estratégia: ' + error.message)
+      }
     }
   }
 
@@ -855,37 +868,62 @@ export default function Home() {
 
       {showCreateStratModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
-            <h3 className="text-lg font-bold text-white">Criar Categoria de Estratégia</h3>
-            <form onSubmit={handleCreateStrategy} className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full space-y-4">
+            <h3 className="text-lg font-bold text-white">Gerenciar Estratégias / Setups</h3>
+            
+            <form onSubmit={handleCreateStrategy} className="space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Nome do Setup / Modelo</label>
-                <input
-                  type="text"
-                  value={newStrategyName}
-                  onChange={(e) => setNewStrategyName(e.target.value)}
-                  placeholder="Ex: FVG + OB, Liquidity Sweep, Order Flow..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateStratModal(false)}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="text-xs bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-lg"
-                >
-                  Salvar
-                </button>
+                <label className="text-xs text-slate-400">Nova Estratégia</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={newStrategyName}
+                    onChange={(e) => setNewStrategyName(e.target.value)}
+                    placeholder="Ex: FVG + OB, Liquidity Sweep..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 rounded-lg text-xs transition"
+                  >
+                    Adicionar
+                  </button>
+                </div>
               </div>
             </form>
+
+            <div className="border-t border-slate-800 pt-3">
+              <span className="text-xs text-slate-400 block mb-2">Estratégias Cadastradas:</span>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {strategies.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-4">Nenhuma estratégia cadastrada.</p>
+                ) : (
+                  strategies.map(s => (
+                    <div key={s.id} className="flex items-center justify-between bg-slate-950 border border-slate-800/80 p-2.5 rounded-lg text-sm">
+                      <span className="text-slate-200 font-medium">{s.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStrategy(s.id, s.name)}
+                        className="text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded transition font-semibold"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateStratModal(false)}
+                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-2.5 rounded-lg font-semibold"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1286,7 +1324,7 @@ export default function Home() {
               onClick={() => setShowCreateStratModal(true)}
               className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg transition"
             >
-              + Nova Estratégia
+              Gerenciar Estratégias
             </button>
           </div>
 
@@ -1363,7 +1401,10 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-400">Estratégia Utilizada</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs text-slate-400">Estratégia Utilizada</label>
+                    <button type="button" onClick={() => setShowCreateStratModal(true)} className="text-[10px] text-emerald-400 hover:underline">Gerenciar</button>
+                  </div>
                   <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
                     <option value="">Selecione...</option>
                     {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
