@@ -103,13 +103,13 @@ export default function Home() {
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   // --- Estados do Painel de Simulação de Monte Carlo Manual ---
-  const [mcInitialCapital, setMcInitialCapital] = useState('10000')
+  const [mcInitialCapital, setMcInitialCapital] = useState('42') // Estilo S(0) base imagem
   const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
-  const [mcRiskValue, setMcRiskValue] = useState('1') // 1%
-  const [mcWinRate, setMcWinRate] = useState('50') // 50%
-  const [mcPayoff, setMcPayoff] = useState('1.5') // 1:1.5
-  const [mcIterations, setMcIterations] = useState('100') // Trades por caminho
-  const [mcPathsCount, setMcPathsCount] = useState('50') // Simulações simultâneas
+  const [mcRiskValue, setMcRiskValue] = useState('1') 
+  const [mcWinRate, setMcWinRate] = useState('50') 
+  const [mcPayoff, setMcPayoff] = useState('1.5') 
+  const [mcIterations, setMcIterations] = useState('45') // Dias (estilo imagem)
+  const [mcPathsCount, setMcPathsCount] = useState('20') // Caminhos simultâneos
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -469,16 +469,16 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
-  // --- Função para Rodar a Simulação de Monte Carlo Manual com Estatísticas Detalhadas ---
+  // --- Função para Rodar a Simulação de Monte Carlo no Estilo Matplotlib ---
   function runMonteCarloSimulation(e: React.FormEvent) {
     e.preventDefault()
 
-    const initialCap = parseFloat(mcInitialCapital) || 10000
+    const initialCap = parseFloat(mcInitialCapital) || 42
     const riskVal = parseFloat(mcRiskValue) || 1
     const winRate = parseFloat(mcWinRate) || 50
     const payoff = parseFloat(mcPayoff) || 1.5
-    const iterations = parseInt(mcIterations) || 100
-    const pathsCount = parseInt(mcPathsCount) || 50
+    const iterations = parseInt(mcIterations) || 45
+    const pathsCount = parseInt(mcPathsCount) || 20
 
     const paths: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[][] = []
     let ruinCount = 0
@@ -489,6 +489,9 @@ export default function Home() {
     let totalLossesAll = 0
     let maxWinningStreakGlobal = 0
     let maxLosingStreakGlobal = 0
+
+    // Cores aleatórias ou predefinidas para dar o aspecto do matplotlib (várias cores)
+    const colorPalette = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ca8a04', '#0891b2', '#4f46e5', '#e11d48', '#65a30d', '#c026d3']
 
     for (let p = 0; p < pathsCount; p++) {
       let currentCap = initialCap
@@ -579,7 +582,8 @@ export default function Home() {
       totalLossesAll,
       maxWinningStreakGlobal,
       maxLosingStreakGlobal,
-      pathsCount
+      pathsCount,
+      colorPalette
     })
   }
 
@@ -898,13 +902,13 @@ export default function Home() {
                 🎲 Simulador de Teste de Monte Carlo
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Configure os parâmetros abaixo para simular múltiplos caminhos futuros para o seu capital com base na sua gestão de risco e assertividade esperada.
+                Configure os parâmetros abaixo para gerar o passeio aleatório dos preços a partir de S(0) no estilo Matplotlib.
               </p>
             </div>
 
             <form onSubmit={runMonteCarloSimulation} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-slate-950 p-5 rounded-xl border border-slate-800/80">
               <div>
-                <label className="text-xs text-slate-400">Capital Inicial ($)</label>
+                <label className="text-xs text-slate-400">Preço Inicial S(0)</label>
                 <input
                   type="number"
                   step="any"
@@ -923,13 +927,13 @@ export default function Home() {
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
                 >
                   <option value="percent">Percentual do Capital (%)</option>
-                  <option value="fixed">Valor Fixo em Dinheiro ($)</option>
+                  <option value="fixed">Valor Fixo ($)</option>
                 </select>
               </div>
 
               <div>
                 <label className="text-xs text-slate-400">
-                  {mcRiskType === 'percent' ? 'Risco por Operação (%)' : 'Risco Fixo por Operação ($)'}
+                  {mcRiskType === 'percent' ? 'Risco por Operação (%)' : 'Risco Fixo ($)'}
                 </label>
                 <input
                   type="number"
@@ -954,7 +958,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Risco / Retorno (Payoff - ex: 1.5)</label>
+                <label className="text-xs text-slate-400">Risco / Retorno (Payoff)</label>
                 <input
                   type="number"
                   step="any"
@@ -966,7 +970,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Trades por Simulação (Iterações)</label>
+                <label className="text-xs text-slate-400">Tempo (Dias / Iterações)</label>
                 <input
                   type="number"
                   value={mcIterations}
@@ -977,7 +981,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Quantidade de Caminhos (Simulações)</label>
+                <label className="text-xs text-slate-400">Quantidade de Caminhos</label>
                 <input
                   type="number"
                   value={mcPathsCount}
@@ -1008,8 +1012,8 @@ export default function Home() {
                   </div>
 
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Capital Médio Final</span>
-                    <p className={`text-2xl font-bold mt-1 ${mcResults.avgFinalCapital >= mcResults.initialCap ? 'text-emerald-400' : 'text-rose-500'}`}>
+                    <span className="text-xs text-slate-400 font-medium uppercase">Preço Médio Final</span>
+                    <p className="text-2xl font-bold text-emerald-400 mt-1">
                       ${mcResults.avgFinalCapital.toFixed(2)}
                     </p>
                   </div>
@@ -1022,7 +1026,7 @@ export default function Home() {
                   </div>
 
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                    <span className="text-xs text-slate-400 font-medium uppercase">Melhor / Pior Capital</span>
+                    <span className="text-xs text-slate-400 font-medium uppercase">Máx / Mín Preço Atingido</span>
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-xs font-bold text-emerald-400">${mcResults.bestCapital.toFixed(0)}</span>
                       <span className="text-xs font-bold text-rose-500">${mcResults.worstCapital.toFixed(0)}</span>
@@ -1030,68 +1034,88 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* GRÁFICO DE LINHAS COM PONTOS INTERATIVOS */}
-                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-3">
-                  <h3 className="text-sm font-bold text-white">📈 Gráfico de Linhas (Simulação de Monte Carlo)</h3>
-                  <div className="h-72 flex items-end gap-0.5 border-b border-l border-slate-800 p-2 overflow-x-auto relative">
-                    {mcResults.paths.map((path: any[], idx: number) => {
-                      const maxVal = Math.max(...mcResults.paths.flat().map((i: any) => i.capital), mcResults.initialCap * 1.5)
-                      const minVal = 0
-                      const range = maxVal - minVal || 1
-
-                      return (
-                        <div key={idx} className="flex-1 min-w-[12px] h-full relative flex items-end group/path">
-                          {/* Linha conectando os pontos */}
-                          <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
-                            {path.map((point, pIdx) => {
-                              if (pIdx === 0) return null
-                              const prevPoint = path[pIdx - 1]
-                              const x1 = ((pIdx - 1) / (path.length - 1)) * 100
-                              const y1 = 100 - ((prevPoint.capital - minVal) / range) * 100
-                              const x2 = (pIdx / (path.length - 1)) * 100
-                              const y2 = 100 - ((point.capital - minVal) / range) * 100
-                              return (
-                                <line
-                                  key={pIdx}
-                                  x1={`${x1}%`}
-                                  y1={`${y1}%`}
-                                  x2={`${x2}%`}
-                                  y2={`${y2}%`}
-                                  stroke={point.capital >= mcResults.initialCap ? '#10b981' : '#f43f5e'}
-                                  strokeWidth="1.5"
-                                  strokeOpacity="0.4"
-                                />
-                              )
-                            })}
-                          </svg>
-
-                          {/* Pontos de Interação */}
-                          {path.map((point, stepIdx) => {
-                            const bottomPercent = Math.max(0, Math.min(100, ((point.capital - minVal) / range) * 100))
-                            return (
-                              <div
-                                key={stepIdx}
-                                style={{ bottom: `${bottomPercent}%` }}
-                                className={`absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full cursor-pointer z-10 transition-transform hover:scale-150 ${
-                                  point.capital >= mcResults.initialCap ? 'bg-emerald-400' : 'bg-rose-500'
-                                } group/point`}
-                              >
-                                {/* Tooltip ao passar o mouse */}
-                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover/point:flex flex-col bg-slate-900 border border-slate-700 text-white text-[10px] rounded p-2 shadow-xl whitespace-nowrap z-50 pointer-events-none">
-                                  <span className="font-bold text-emerald-400">Trade #{point.step}</span>
-                                  <span>Capital: ${point.capital.toFixed(2)}</span>
-                                  <span>Resultado: {point.isWin ? `Vitória (+$${point.pnl.toFixed(2)})` : `Derrota (-$${Math.abs(point.pnl).toFixed(2)})`}</span>
-                                  <span>Drawdown Atual: {point.drawdown.toFixed(1)}%</span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
+                {/* GRÁFICO ESTILO MATPLOTLIB (Fundo Branco/Cinza Claro, Grade Quadriculada, Linhas Coloridas e Sem Quebras) */}
+                <div className="bg-slate-900 border border-slate-300 p-4 rounded-xl space-y-2 text-slate-900 shadow-xl">
+                  {/* Título Estilo Matplotlib */}
+                  <div className="text-center font-serif text-sm font-semibold tracking-wide text-slate-800 pb-1">
+                    Passeio aleatório dos preços a partir de S(0)
                   </div>
-                  <p className="text-[11px] text-slate-500 text-center">
-                    Passe o mouse sobre os pontos de cada linha para inspecionar os detalhes estatísticos daquela iteração específica.
+
+                  {/* Container do Gráfico */}
+                  <div className="relative h-80 bg-white border border-slate-400 grid grid-cols-1 grid-rows-1 p-2 overflow-hidden">
+                    
+                    {/* Linhas de Grade Quadriculada (Grid do Matplotlib) */}
+                    <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 pointer-events-none">
+                      {Array.from({ length: 36 }).map((_, i) => (
+                        <div key={i} className="border-r border-b border-slate-200/80" />
+                      ))}
+                    </div>
+
+                    {/* Eixo Y Label */}
+                    <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 text-[11px] font-sans font-medium text-slate-700 tracking-wider">
+                      Preço
+                    </div>
+
+                    {/* SVG para desenhar linhas contínuas suaves cruzando os pontos (estilo exato da imagem) */}
+                    <svg className="absolute inset-12 right-4 bottom-8 top-4 w-[calc(100%-4rem)] h-[calc(100%-3rem)] overflow-visible">
+                      {(() => {
+                        const allPoints = mcResults.paths.flat().map((i: any) => i.capital)
+                        const maxVal = Math.max(...allPoints, mcResults.initialCap * 1.2)
+                        const minVal = Math.min(...allPoints, mcResults.initialCap * 0.8)
+                        const range = maxVal - minVal || 1
+
+                        return mcResults.paths.map((path: any[], idx: number) => {
+                          const strokeColor = mcResults.colorPalette[idx % mcResults.colorPalette.length]
+
+                          // Gerar string de pontos para o elemento <polyline> ou <path> SVG
+                          const pointsString = path.map((point, pIdx) => {
+                            const x = (pIdx / (path.length - 1)) * 100
+                            const y = 100 - ((point.capital - minVal) / range) * 100
+                            return `${x}%,${y}%`
+                          }).join(' ')
+
+                          return (
+                            <g key={idx} className="group/line">
+                              {/* Linha Contínua Fluida */}
+                              <polyline
+                                fill="none"
+                                stroke={strokeColor}
+                                strokeWidth="1.5"
+                                strokeOpacity="0.85"
+                                points={pointsString}
+                                className="transition-all duration-200 hover:stroke-width-3 hover:stroke-black cursor-pointer"
+                              />
+
+                              {/* Pontos invisíveis maiores espalhados para tooltip ao passar o mouse */}
+                              {path.map((point, pIdx) => {
+                                const cx = (pIdx / (path.length - 1)) * 100
+                                const cy = 100 - ((point.capital - minVal) / range) * 100
+                                return (
+                                  <circle
+                                    key={pIdx}
+                                    cx={`${cx}%`}
+                                    cy={`${cy}%`}
+                                    r="4"
+                                    className="fill-transparent hover:fill-slate-900 cursor-pointer group/point"
+                                  >
+                                    <title>{`Iteração/Dia #${point.step}\nPreço: $${point.capital.toFixed(2)}\nPnL do Ponto: $${point.pnl.toFixed(2)}\nDrawdown: ${point.drawdown.toFixed(1)}%`}</title>
+                                  </circle>
+                                )
+                              })}
+                            </g>
+                          )
+                        })
+                      })()}
+                    </svg>
+
+                    {/* Eixo X Label */}
+                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[11px] font-sans font-medium text-slate-700">
+                      Tempo (dias)
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 text-center italic">
+                    * Passe o mouse diretamente sobre as linhas ou pontos coloridos para ver os detalhes da iteração correspondente.
                   </p>
                 </div>
 
@@ -1115,7 +1139,7 @@ export default function Home() {
                     </div>
 
                     <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Capital Inicial Global</span>
+                      <span className="text-[11px] text-slate-400 block">Preço Inicial S(0)</span>
                       <span className="text-lg font-bold text-slate-200">${mcResults.initialCap}</span>
                     </div>
 
@@ -1130,13 +1154,13 @@ export default function Home() {
                     </div>
 
                     <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Total de Caminhos Testados</span>
-                      <span className="text-lg font-bold text-slate-200">{mcResults.pathsCount} simulações</span>
+                      <span className="text-[11px] text-slate-400 block">Caminhos Simulados</span>
+                      <span className="text-lg font-bold text-slate-200">{mcResults.pathsCount} trajetórias</span>
                     </div>
 
                     <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
-                      <span className="text-[11px] text-slate-400 block">Média de Trades por Caminho</span>
-                      <span className="text-lg font-bold text-slate-200">{mcResults.iterations} trades</span>
+                      <span className="text-[11px] text-slate-400 block">Duração (Dias)</span>
+                      <span className="text-lg font-bold text-slate-200">{mcResults.iterations} dias</span>
                     </div>
                   </div>
                 </div>
