@@ -8,7 +8,6 @@ import {
   endOfMonth,
   eachDayOfInterval,
   isSameMonth,
-  isSameDay,
   addMonths,
   subMonths,
   getDay,
@@ -106,11 +105,11 @@ export default function Home() {
   // --- Estados do Painel de Simulação de Monte Carlo Manual ---
   const [mcInitialCapital, setMcInitialCapital] = useState('10000')
   const [mcRiskType, setMcRiskType] = useState<'percent' | 'fixed'>('percent')
-  const [mcRiskValue, setMcRiskValue] = useState('1') // 1% ou $100
+  const [mcRiskValue, setMcRiskValue] = useState('1') // 1%
   const [mcWinRate, setMcWinRate] = useState('50') // 50%
-  const [mcPayoff, setMcPayoff] = useState('1.5') // Risco/Retorno 1:1.5
-  const [mcIterations, setMcIterations] = useState('100') // Quantidade de Trades por caminho
-  const [mcPathsCount, setMcPathsCount] = useState('50') // Quantidade de simulações simultâneas
+  const [mcPayoff, setMcPayoff] = useState('1.5') // 1:1.5
+  const [mcIterations, setMcIterations] = useState('100') // Trades por caminho
+  const [mcPathsCount, setMcPathsCount] = useState('50') // Simulações simultâneas
   const [mcResults, setMcResults] = useState<any | null>(null)
 
   useEffect(() => {
@@ -470,7 +469,7 @@ export default function Home() {
     setTradeDate(new Date().toISOString().split('T')[0])
   }
 
-  // --- Função para Rodar a Simulação de Monte Carlo Manual ---
+  // --- Função para Rodar a Simulação de Monte Carlo Manual com Estatísticas Detalhadas ---
   function runMonteCarloSimulation(e: React.FormEvent) {
     e.preventDefault()
 
@@ -481,38 +480,59 @@ export default function Home() {
     const iterations = parseInt(mcIterations) || 100
     const pathsCount = parseInt(mcPathsCount) || 50
 
-    const paths: number[][] = []
+    const paths: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[][] = []
     let ruinCount = 0
     let finalCapitals: number[] = []
     let maxDrawdowns: number[] = []
+    
+    let totalWinsAll = 0
+    let totalLossesAll = 0
+    let maxWinningStreakGlobal = 0
+    let maxLosingStreakGlobal = 0
 
     for (let p = 0; p < pathsCount; p++) {
       let currentCap = initialCap
-      let pathValues = [currentCap]
+      let pathDetails: { step: number; capital: number; isWin: boolean; pnl: number; drawdown: number }[] = [
+        { step: 0, capital: currentCap, isWin: true, pnl: 0, drawdown: 0 }
+      ]
       let peak = currentCap
       let maxDd = 0
 
-      for (let i = 0; i < iterations; i++) {
+      let currentWinStreak = 0
+      let currentLossStreak = 0
+      let pathWins = 0
+      let pathLosses = 0
+
+      for (let i = 1; i <= iterations; i++) {
         if (currentCap <= 0) {
           currentCap = 0
-          pathValues.push(currentCap)
+          pathDetails.push({ step: i, capital: currentCap, isWin: false, pnl: 0, drawdown: maxDd })
           continue
         }
 
-        // Calcula o risco em dinheiro do trade
         const riskAmount = mcRiskType === 'percent' ? currentCap * (riskVal / 100) : riskVal
-
         const isWin = Math.random() * 100 < winRate
+        let tradePnl = 0
 
         if (isWin) {
-          currentCap += riskAmount * payoff
+          tradePnl = riskAmount * payoff
+          currentCap += tradePnl
+          pathWins++
+          totalWinsAll++
+          currentWinStreak++
+          currentLossStreak = 0
+          if (currentWinStreak > maxWinningStreakGlobal) maxWinningStreakGlobal = currentWinStreak
         } else {
+          tradePnl = -riskAmount
           currentCap -= riskAmount
+          pathLosses++
+          totalLossesAll++
+          currentLossStreak++
+          currentWinStreak = 0
+          if (currentLossStreak > maxLosingStreakGlobal) maxLosingStreakGlobal = currentLossStreak
         }
 
         if (currentCap < 0) currentCap = 0
-
-        pathValues.push(currentCap)
 
         if (currentCap > peak) {
           peak = currentCap
@@ -521,9 +541,17 @@ export default function Home() {
         if (dd > maxDd) {
           maxDd = dd
         }
+
+        pathDetails.push({
+          step: i,
+          capital: currentCap,
+          isWin,
+          pnl: tradePnl,
+          drawdown: maxDd
+        })
       }
 
-      paths.push(pathValues)
+      paths.push(pathDetails)
       finalCapitals.push(currentCap)
       maxDrawdowns.push(maxDd)
 
@@ -546,7 +574,12 @@ export default function Home() {
       worstCapital,
       paths,
       initialCap,
-      iterations
+      iterations,
+      totalWinsAll,
+      totalLossesAll,
+      maxWinningStreakGlobal,
+      maxLosingStreakGlobal,
+      pathsCount
     })
   }
 
@@ -997,24 +1030,60 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* GRÁFICO DE LINHAS COM PONTOS INTERATIVOS */}
                 <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-3">
-                  <h3 className="text-sm font-bold text-white">📈 Projeção Gráfica dos Caminhos (Monte Carlo)</h3>
-                  <div className="h-64 flex items-end gap-1 border-b border-l border-slate-800 p-2 overflow-x-auto">
-                    {mcResults.paths.map((path: number[], idx: number) => {
-                      const maxVal = Math.max(...mcResults.paths.flat(), mcResults.initialCap * 1.5)
+                  <h3 className="text-sm font-bold text-white">📈 Gráfico de Linhas (Simulação de Monte Carlo)</h3>
+                  <div className="h-72 flex items-end gap-0.5 border-b border-l border-slate-800 p-2 overflow-x-auto relative">
+                    {mcResults.paths.map((path: any[], idx: number) => {
+                      const maxVal = Math.max(...mcResults.paths.flat().map((i: any) => i.capital), mcResults.initialCap * 1.5)
                       const minVal = 0
                       const range = maxVal - minVal || 1
 
                       return (
-                        <div key={idx} className="flex-1 min-w-[4px] h-full relative flex items-end">
-                          {path.map((val: number, stepIdx: number) => {
-                            const heightPercent = Math.max(0, Math.min(100, ((val - minVal) / range) * 100))
+                        <div key={idx} className="flex-1 min-w-[12px] h-full relative flex items-end group/path">
+                          {/* Linha conectando os pontos */}
+                          <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
+                            {path.map((point, pIdx) => {
+                              if (pIdx === 0) return null
+                              const prevPoint = path[pIdx - 1]
+                              const x1 = ((pIdx - 1) / (path.length - 1)) * 100
+                              const y1 = 100 - ((prevPoint.capital - minVal) / range) * 100
+                              const x2 = (pIdx / (path.length - 1)) * 100
+                              const y2 = 100 - ((point.capital - minVal) / range) * 100
+                              return (
+                                <line
+                                  key={pIdx}
+                                  x1={`${x1}%`}
+                                  y1={`${y1}%`}
+                                  x2={`${x2}%`}
+                                  y2={`${y2}%`}
+                                  stroke={point.capital >= mcResults.initialCap ? '#10b981' : '#f43f5e'}
+                                  strokeWidth="1.5"
+                                  strokeOpacity="0.4"
+                                />
+                              )
+                            })}
+                          </svg>
+
+                          {/* Pontos de Interação */}
+                          {path.map((point, stepIdx) => {
+                            const bottomPercent = Math.max(0, Math.min(100, ((point.capital - minVal) / range) * 100))
                             return (
                               <div
                                 key={stepIdx}
-                                style={{ height: `${heightPercent}%`, width: '100%' }}
-                                className={`absolute bottom-0 w-full opacity-30 ${val >= mcResults.initialCap ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                              />
+                                style={{ bottom: `${bottomPercent}%` }}
+                                className={`absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full cursor-pointer z-10 transition-transform hover:scale-150 ${
+                                  point.capital >= mcResults.initialCap ? 'bg-emerald-400' : 'bg-rose-500'
+                                } group/point`}
+                              >
+                                {/* Tooltip ao passar o mouse */}
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover/point:flex flex-col bg-slate-900 border border-slate-700 text-white text-[10px] rounded p-2 shadow-xl whitespace-nowrap z-50 pointer-events-none">
+                                  <span className="font-bold text-emerald-400">Trade #{point.step}</span>
+                                  <span>Capital: ${point.capital.toFixed(2)}</span>
+                                  <span>Resultado: {point.isWin ? `Vitória (+$${point.pnl.toFixed(2)})` : `Derrota (-$${Math.abs(point.pnl).toFixed(2)})`}</span>
+                                  <span>Drawdown Atual: {point.drawdown.toFixed(1)}%</span>
+                                </div>
+                              </div>
                             )
                           })}
                         </div>
@@ -1022,8 +1091,54 @@ export default function Home() {
                     })}
                   </div>
                   <p className="text-[11px] text-slate-500 text-center">
-                    Cada linha representa uma simulação independente de {mcResults.iterations} operações. Linhas verdes terminam no lucro; vermelhas no prejuízo.
+                    Passe o mouse sobre os pontos de cada linha para inspecionar os detalhes estatísticos daquela iteração específica.
                   </p>
+                </div>
+
+                {/* PAINEL DE RESUMO ESTATÍSTICO ABAIXO DO GRÁFICO */}
+                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">📊 Resumo Estatístico Consolidado da Simulação</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Operações Vencedoras</span>
+                      <span className="text-lg font-bold text-emerald-400">{mcResults.totalWinsAll}</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Operações Perdedoras</span>
+                      <span className="text-lg font-bold text-rose-500">{mcResults.totalLossesAll}</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Maior Drawdown Médio</span>
+                      <span className="text-lg font-bold text-amber-400">{mcResults.avgMaxDD.toFixed(1)}%</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Capital Inicial Global</span>
+                      <span className="text-lg font-bold text-slate-200">${mcResults.initialCap}</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Maior Seq. Ganhadora</span>
+                      <span className="text-lg font-bold text-blue-400">{mcResults.maxWinningStreakGlobal} trades</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Maior Seq. Perdedora</span>
+                      <span className="text-lg font-bold text-purple-400">{mcResults.maxLosingStreakGlobal} trades</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Total de Caminhos Testados</span>
+                      <span className="text-lg font-bold text-slate-200">{mcResults.pathsCount} simulações</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                      <span className="text-[11px] text-slate-400 block">Média de Trades por Caminho</span>
+                      <span className="text-lg font-bold text-slate-200">{mcResults.iterations} trades</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
