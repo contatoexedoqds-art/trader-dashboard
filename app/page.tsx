@@ -1,10 +1,12 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
 
 // --- INTERFACES & TIPAGENS ---
 export interface Trade {
   id: string;
   workspaceId: string;
-  date: string; // Formato YYYY-MM-DD
+  date: string;
   asset: string;
   type: 'LONG' | 'SHORT';
   entryPrice: number;
@@ -30,7 +32,7 @@ export interface MonteCarloResults {
   expectedReturn: number;
 }
 
-export const TradingDashboard: React.FC = () => {
+export default function Page() {
   // --- ESTADOS DE WORKSPACE E TRADES ---
   const [workspaces, setWorkspaces] = useState<Workspace[]>([
     { id: 'ws-1', name: 'Mesa Proprietária ($5k)', initialCapital: 5000 },
@@ -92,7 +94,7 @@ export const TradingDashboard: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 5;
 
-  // FIX 3: Reset automático da página para 1 sempre que os filtros mudarem
+  // Reset automático da página ao alterar qualquer filtro
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedWorkspaceId, startDate, endDate, selectedSetup]);
@@ -109,8 +111,7 @@ export const TradingDashboard: React.FC = () => {
   const [newCompliant, setNewCompliant] = useState(true);
   const [newChartUrl, setNewChartUrl] = useState('');
 
-  // --- ESTADO DE ERROS DE IMAGEM DO TRADINGVIEW ---
-  // FIX 4: Rastreamento individual de erros em URLs de gráficos
+  // --- CONTROLE DE ERRO NAS IMAGENS TRADINGVIEW ---
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   const handleImageError = (tradeId: string) => {
@@ -119,13 +120,13 @@ export const TradingDashboard: React.FC = () => {
 
   // --- ESTADOS DO SIMULADOR DE MONTE CARLO ---
   const [mcInitialCapital, setMcInitialCapital] = useState('5000');
-  const [mcRiskPercent, setMcRiskPercent] = useState('0.25'); // Risco alinhado para 0.25%
+  const [mcRiskPercent, setMcRiskPercent] = useState('0.25');
   const [mcTradeCount, setMcTradeCount] = useState('100');
   const [mcSimulations, setMcSimulations] = useState('100');
   const [mcRiskMode, setMcRiskMode] = useState<'percent' | 'risk'>('percent');
   const [mcResults, setMcResults] = useState<MonteCarloResults | null>(null);
 
-  // --- TRADES FILTRADOS ---
+  // --- FILTRAGEM DE TRADES ---
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
       if (t.workspaceId !== selectedWorkspaceId) return false;
@@ -136,7 +137,6 @@ export const TradingDashboard: React.FC = () => {
     });
   }, [trades, selectedWorkspaceId, startDate, endDate, selectedSetup]);
 
-  // Trades paginados
   const paginatedTrades = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredTrades.slice(startIndex, startIndex + itemsPerPage);
@@ -144,7 +144,7 @@ export const TradingDashboard: React.FC = () => {
 
   const totalPages = Math.ceil(filteredTrades.length / itemsPerPage) || 1;
 
-  // --- MÉTRICAS E ESTATÍSTICAS ---
+  // --- CÁLCULO DE MÉTRICAS ---
   const stats = useMemo(() => {
     const totalTrades = filteredTrades.length;
     if (totalTrades === 0) {
@@ -171,13 +171,12 @@ export const TradingDashboard: React.FC = () => {
     };
   }, [filteredTrades]);
 
-  // Lista única de setups para o filtro
   const availableSetups = useMemo(() => {
     const set = new Set(trades.map((t) => t.setup));
     return Array.from(set);
   }, [trades]);
 
-  // --- REGISTRAR OPERAÇÃO ---
+  // --- ADICIONAR TRADE ---
   const handleAddTrade = (e: React.FormEvent) => {
     e.preventDefault();
     const trade: Trade = {
@@ -197,14 +196,12 @@ export const TradingDashboard: React.FC = () => {
     };
 
     setTrades([trade, ...trades]);
-
-    // Reseta o formulário
     setNewPnl('');
     setNewResultR('');
     setNewChartUrl('');
   };
 
-  // --- SIMULAÇÃO DE MONTE CARLO ---
+  // --- SIMULAÇÃO MONTE CARLO ---
   const runMonteCarloSimulation = () => {
     const initialCap = parseFloat(mcInitialCapital) || 5000;
     const riskPct = parseFloat(mcRiskPercent) || 0.25;
@@ -219,7 +216,7 @@ export const TradingDashboard: React.FC = () => {
     const returnsR = filteredTrades.map((t) => t.resultR || 0);
     const paths: number[][] = [];
     let maxDDGlobal = 0;
-    let totalMaxDD = 0; // Acumulador para cálculo de média real
+    let totalMaxDD = 0;
     let totalReturnPct = 0;
 
     for (let s = 0; s < numSims; s++) {
@@ -231,7 +228,6 @@ export const TradingDashboard: React.FC = () => {
       for (let t = 0; t < numTrades; t++) {
         const randomR = returnsR[Math.floor(Math.random() * returnsR.length)];
 
-        // FIX 1: Aplicação correta de mcRiskMode (percentual composto vs fixo do capital inicial)
         const riskAmount =
           mcRiskMode === 'percent'
             ? currentCap * (riskPct / 100)
@@ -260,7 +256,6 @@ export const TradingDashboard: React.FC = () => {
       paths.push(path);
     }
 
-    // FIX 2: Cálculo real da Média de Drawdown Máximo entre todas as rotas simuladas
     const avgMaxDrawdown = totalMaxDD / numSims;
 
     setMcResults({
@@ -271,7 +266,7 @@ export const TradingDashboard: React.FC = () => {
     });
   };
 
-  // --- EXPORTAR E IMPORTAR BACKUP JSON ---
+  // --- EXPORTAR E IMPORTAR DATA ---
   const exportData = () => {
     const data = JSON.stringify({ workspaces, trades }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -295,7 +290,7 @@ export const TradingDashboard: React.FC = () => {
             alert('Dados importados com sucesso!');
           }
         } catch (err) {
-          alert('Erro ao importar arquivo JSON inválido.');
+          alert('Erro ao importar arquivo JSON.');
         }
       };
     }
@@ -304,7 +299,7 @@ export const TradingDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* HEADER / SELETOR DE WORKSPACE */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white">Dashboard & Diário de Trade</h1>
@@ -337,7 +332,7 @@ export const TradingDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* MÉTRICAS PRINCIPAIS */}
+        {/* MÉTRICAS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <span className="text-xs text-slate-400 block">Total de Trades</span>
@@ -364,13 +359,13 @@ export const TradingDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* SIMULADOR DE MONTE CARLO */}
+        {/* MONTE CARLO */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-white">Simulador de Monte Carlo</h2>
               <p className="text-xs text-slate-400">
-                Projeta trajetórias de equidade com base na amostragem aleatória dos seus retornos R.
+                Projeta trajetórias de equidade com amostragem aleatória do seu histórico.
               </p>
             </div>
             <button
@@ -381,7 +376,6 @@ export const TradingDashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* PARÂMETROS DO MONTE CARLO */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
             <div>
               <label className="text-slate-400 block mb-1">Capital Inicial ($)</label>
@@ -443,13 +437,12 @@ export const TradingDashboard: React.FC = () => {
                     mcRiskMode === 'risk' ? 'bg-emerald-600 text-white' : 'text-slate-400'
                   }`}
                 >
-                  Fixo Cap. Inicial
+                  Fixo
                 </button>
               </div>
             </div>
           </div>
 
-          {/* PAINEL DE RESULTADOS DO MONTE CARLO */}
           {mcResults && (
             <div className="space-y-4 pt-2">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -458,7 +451,6 @@ export const TradingDashboard: React.FC = () => {
                   <span className="text-xl font-bold text-rose-400">{mcResults.maxDrawdown.toFixed(2)}%</span>
                 </div>
 
-                {/* FIX 2: Renderização ajustada para exibir a média estatística real */}
                 <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
                   <span className="text-xs text-slate-400 block">Média Máxima de Drawdown</span>
                   <span className="text-xl font-bold text-amber-400">{mcResults.avgMaxDrawdown.toFixed(2)}%</span>
@@ -470,7 +462,6 @@ export const TradingDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* CURVAS SVG DO MONTE CARLO */}
               <div className="h-48 w-full bg-slate-950 rounded-lg p-2 border border-slate-800 flex items-center justify-center relative overflow-hidden">
                 <svg className="w-full h-full" viewBox="0 0 1000 300" preserveAspectRatio="none">
                   {mcResults.paths.slice(0, 30).map((path, idx) => {
@@ -601,12 +592,11 @@ export const TradingDashboard: React.FC = () => {
           </form>
         </div>
 
-        {/* TABELA DE HISTÓRICO COM PAGINAÇÃO E FILTROS */}
+        {/* TABELA DE HISTÓRICO */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h2 className="text-lg font-semibold text-white">Histórico de Operações</h2>
 
-            {/* CONTROLES DE FILTRO */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <input
                 type="date"
@@ -637,7 +627,6 @@ export const TradingDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* CONTEÚDO DA TABELA */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300 border-collapse">
               <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider">
@@ -700,16 +689,14 @@ export const TradingDashboard: React.FC = () => {
                             >
                               Ver Link
                             </a>
-
-                            {/* FIX 4: Feedback visual explícito caso o link da imagem esteja corrompido */}
                             {imageErrors[t.id] ? (
                               <div className="text-[10px] text-rose-400 font-medium">
-                                Link de imagem indisponível
+                                Link indisponível
                               </div>
                             ) : (
                               <img
                                 src={t.chartUrl}
-                                alt="Gráfico da Operação"
+                                alt="Gráfico"
                                 className="w-12 h-8 object-cover rounded border border-slate-700 hidden"
                                 onError={() => handleImageError(t.id)}
                               />
@@ -726,7 +713,6 @@ export const TradingDashboard: React.FC = () => {
             </table>
           </div>
 
-          {/* NAVEGAÇÃO DE PAGINAÇÃO */}
           <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
             <span>
               Página {currentPage} de {totalPages}
@@ -752,6 +738,4 @@ export const TradingDashboard: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default TradingDashboard;
+}
