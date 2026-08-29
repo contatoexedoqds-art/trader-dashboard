@@ -293,7 +293,7 @@ export default function Home() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+        redirectTo: 'https://trader-dashboard-lilac.vercel.app/reset-password',
       })
       if (error) {
         setAuthError(error.message)
