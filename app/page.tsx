@@ -11,13 +11,21 @@ import {
   addMonths,
   subMonths,
   getDay,
-  parseISO
+  parseISO,
+  addDays
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+interface Profile {
+  id: string
+  email: string
+  is_admin: boolean
+  access_until: string | null
+}
 
 interface Workspace {
   id: string
@@ -51,7 +59,13 @@ interface Trade {
 
 export default function Home() {
   const [session, setSession] = useState<any>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loadingSession, setLoadingSession] = useState(true)
+
+  // Controle do Modal de Licenças/Admin
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([])
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
 
   // Navegação de Abas ("dashboard" ou "montecarlo")
   const [activeTab, setActiveTab] = useState<'dashboard' | 'montecarlo'>('dashboard')
@@ -121,22 +135,77 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      setLoadingSession(false)
+      if (session) fetchProfile(session.user.id)
+      else setLoadingSession(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      setLoadingSession(false)
+      if (session) fetchProfile(session.user.id)
+      else {
+        setProfile(null)
+        setLoadingSession(false)
+      }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
+  async function fetchProfile(userId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (data) {
+      setProfile(data)
+    }
+    setLoadingSession(false)
+  }
+
   useEffect(() => {
-    if (session) {
+    if (session && isAccessValid()) {
       fetchData()
     }
-  }, [session])
+  }, [session, profile])
+
+  function isAccessValid() {
+    if (!profile) return true // Se não achou perfil ainda, permite carregar
+    if (profile.is_admin) return true // Admins têm acesso vitalício
+    if (!profile.access_until) return true // Acesso ilimitado
+    return new Date(profile.access_until) > new Date()
+  }
+
+  async function fetchAllProfiles() {
+    setLoadingProfiles(true)
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    if (data) setAllProfiles(data)
+    setLoadingProfiles(false)
+  }
+
+  async function handleUpdateAccess(userId: string, daysToAdd: number | null) {
+    let newDate: string | null = null
+
+    if (daysToAdd !== null) {
+      const baseDate = new Date()
+      newDate = addDays(baseDate, daysToAdd).toISOString()
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ access_until: newDate })
+      .eq('id', userId)
+
+    if (!error) {
+      fetchAllProfiles()
+      if (profile && profile.id === userId) {
+        setProfile({ ...profile, access_until: newDate })
+      }
+    } else {
+      alert('Erro ao atualizar acesso: ' + error.message)
+    }
+  }
 
   async function fetchData() {
     setLoadingTrades(true)
@@ -726,6 +795,41 @@ export default function Home() {
     )
   }
 
+  // TELA DE BLOQUEIO POR EXPIRAÇÃO DE LICENÇA
+  if (!isAccessValid()) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-5">
+          <div className="text-4xl">🔒</div>
+          <h2 className="text-xl font-bold text-white">Acesso Expirado</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Sua licença de uso venceu em{' '}
+            <strong className="text-rose-400">
+              {profile?.access_until ? format(new Date(profile.access_until), 'dd/MM/yyyy') : 'data indefinida'}
+            </strong>
+            . Para renovar o seu plano e continuar acessando suas ferramentas, entre em contato.
+          </p>
+          <div className="pt-2 flex flex-col gap-2">
+            <a
+              href="https://wa.me/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg text-xs transition"
+            >
+              Renovar Licença via WhatsApp
+            </a>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-lg text-xs transition"
+            >
+              Sair da Conta
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
@@ -792,6 +896,19 @@ export default function Home() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Painel do Administrador (só aparece para is_admin = true) */}
+          {profile?.is_admin && (
+            <button
+              onClick={() => {
+                setShowAdminModal(true)
+                fetchAllProfiles()
+              }}
+              className="text-xs bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 font-bold px-3 py-2 rounded-lg transition"
+            >
+              👑 Moderação / Licenças
+            </button>
+          )}
+
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -862,6 +979,75 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* Modal de Gerenciamento de Licenças (Administrador) */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-2xl w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-lg font-bold text-amber-400 flex items-center gap-2">
+                👑 Gerenciador de Usuários e Licenças
+              </h3>
+              <button
+                onClick={() => setShowAdminModal(false)}
+                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {loadingProfiles ? (
+              <p className="text-xs text-slate-400 py-6 text-center">Carregando usuários...</p>
+            ) : (
+              <div className="overflow-x-auto max-h-[60vh]">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 uppercase">
+                    <tr>
+                      <th className="p-3">E-mail</th>
+                      <th className="p-3">Expiração</th>
+                      <th className="p-3 text-right">Ações de Licença</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {allProfiles.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-800/30">
+                        <td className="p-3 font-semibold text-white">
+                          {p.email} {p.is_admin && <span className="text-[10px] text-amber-400 border border-amber-400/30 px-1 rounded">ADMIN</span>}
+                        </td>
+                        <td className="p-3">
+                          {p.access_until
+                            ? format(new Date(p.access_until), 'dd/MM/yyyy')
+                            : 'Ilimitado'}
+                        </td>
+                        <td className="p-3 text-right space-x-1">
+                          <button
+                            onClick={() => handleUpdateAccess(p.id, 30)}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded text-[11px]"
+                          >
+                            +30 dias
+                          </button>
+                          <button
+                            onClick={() => handleUpdateAccess(p.id, 0)}
+                            className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-1 rounded text-[11px]"
+                          >
+                            Expirar
+                          </button>
+                          <button
+                            onClick={() => handleUpdateAccess(p.id, null)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 py-1 rounded text-[11px]"
+                          >
+                            Ilimitado
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal para Visualizar a Imagem do Gráfico */}
       {viewingImageUrl && (
