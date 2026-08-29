@@ -1,80 +1,120 @@
 'use client'
 
-import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useState, useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
 export default function ResetPasswordPage() {
-  const [newPassword, setNewPassword] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
-  const supabase = createClientComponentClient()
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const router = useRouter()
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  useEffect(() => {
+    // Captura o evento de recuperação assim que o link do e-mail é aberto
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setError('')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault()
+    setError('')
+
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem.')
+      return
+    }
+
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres.')
+      return
+    }
+
     setLoading(true)
-    setMessage(null)
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      })
-      if (error) throw error
-      setMessage({ type: 'success', text: 'Senha atualizada com sucesso! Redirecionando...' })
-      setTimeout(() => {
-        router.push('/')
-      }, 2000)
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Erro ao atualizar a senha.' })
+      const { error } = await supabase.auth.updateUser({ password })
+
+      if (error) {
+        setError(error.message)
+      } else {
+        setSuccess(true)
+        setTimeout(() => {
+          router.push('/')
+        }, 3000)
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro ao redefinir a senha.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-8 shadow-lg">
-        <h2 className="text-center text-3xl font-extrabold text-gray-900">
-          Digite a Nova Senha
-        </h2>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl space-y-6">
+        <div className="text-center space-y-1">
+          <h1 className="text-xl font-bold text-emerald-400">🔑 Nova Senha</h1>
+          <p className="text-xs text-slate-400">Digite sua nova senha abaixo para atualizar sua conta</p>
+        </div>
 
-        {message && (
-          <div
-            className={`rounded-md p-4 text-sm ${
-              message.type === 'error'
-                ? 'bg-red-50 text-red-700'
-                : 'bg-green-50 text-green-700'
-            }`}
-          >
-            {message.text}
+        {error && (
+          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg text-center">
+            {error}
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleUpdatePassword}>
-          <div>
-            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
-              Nova Senha
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              required
-              minLength={6}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-            />
+        {success ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-4 rounded-lg text-center space-y-2">
+            <p className="font-bold text-sm">✓ Senha alterada com sucesso!</p>
+            <p className="text-slate-300">Redirecionando para a página de login...</p>
           </div>
+        ) : (
+          <form onSubmit={handleUpdatePassword} className="space-y-4">
+            <div>
+              <label className="text-xs text-slate-400">Nova Senha</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-          >
-            {loading ? 'Atualizando...' : 'Atualizar Senha'}
-          </button>
-        </form>
+            <div>
+              <label className="text-xs text-slate-400">Confirme a Nova Senha</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50"
+            >
+              {loading ? 'Atualizando...' : 'Redefinir Senha'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )
