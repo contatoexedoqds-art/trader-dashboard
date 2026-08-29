@@ -11,13 +11,21 @@ import {
   addMonths,
   subMonths,
   getDay,
-  parseISO
+  parseISO,
+  addDays
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+interface UserProfile {
+  id: string
+  email: string
+  is_admin: boolean
+  access_until: string | null
+}
 
 interface Workspace {
   id: string
@@ -52,6 +60,12 @@ interface Trade {
 export default function Home() {
   const [session, setSession] = useState<any>(null)
   const [loadingSession, setLoadingSession] = useState(true)
+
+  // Perfil e Licença do Usuário
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([])
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [loadingAdmin, setLoadingAdmin] = useState(false)
 
   // Navegação de Abas ("dashboard" ou "montecarlo")
   const [activeTab, setActiveTab] = useState<'dashboard' | 'montecarlo'>('dashboard')
@@ -121,22 +135,76 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      setLoadingSession(false)
+      if (session) fetchUserProfile(session.user.id)
+      else setLoadingSession(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      setLoadingSession(false)
+      if (session) fetchUserProfile(session.user.id)
+      else setLoadingSession(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
+  async function fetchUserProfile(userId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (data) {
+      setProfile(data)
+    }
+    setLoadingSession(false)
+  }
+
   useEffect(() => {
-    if (session) {
+    if (session && isAccessValid()) {
       fetchData()
     }
-  }, [session])
+  }, [session, profile])
+
+  function isAccessValid() {
+    if (!profile) return true
+    if (profile.is_admin) return true
+    if (!profile.access_until) return true
+    return new Date(profile.access_until) > new Date()
+  }
+
+  async function fetchAdminUsers() {
+    setLoadingAdmin(true)
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    if (data) setAllProfiles(data)
+    setLoadingAdmin(false)
+  }
+
+  async function handleUpdateAccess(userId: string, daysToAdd: number | null) {
+    let newDate: string | null = null
+
+    if (daysToAdd !== null) {
+      const currentAccess = allProfiles.find(p => p.id === userId)?.access_until
+      const baseDate = currentAccess && new Date(currentAccess) > new Date() ? new Date(currentAccess) : new Date()
+      newDate = addDays(baseDate, daysToAdd).toISOString()
+    }
+
+    const { error } = await supabase.from('profiles').update({ access_until: newDate }).eq('id', userId)
+
+    if (!error) {
+      fetchAdminUsers()
+    } else {
+      alert('Erro ao atualizar acesso: ' + error.message)
+    }
+  }
+
+  async function handleExpireAccess(userId: string) {
+    const pastDate = new Date(Date.now() - 86400000).toISOString()
+    const { error } = await supabase.from('profiles').update({ access_until: pastDate }).eq('id', userId)
+    if (!error) fetchAdminUsers()
+    else alert('Erro ao expirar acesso: ' + error.message)
+  }
 
   async function fetchData() {
     setLoadingTrades(true)
@@ -253,7 +321,7 @@ export default function Home() {
           }
         } catch (error: any) {
           alert('Erro ao ler arquivo de backup: ' + error.message)
-        } finally {
+        } fontally {
           setLoadingTrades(false)
           e.target.value = ''
         }
@@ -726,6 +794,40 @@ export default function Home() {
     )
   }
 
+  // TELA DE BLOQUEIO POR LICENÇA EXPIRADA
+  if (!isAccessValid()) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-5">
+          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center mx-auto text-3xl">
+            🔒
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-rose-400">Acesso Expirado</h2>
+            <p className="text-xs text-slate-400">
+              O seu período de teste/acesso encerrou em{' '}
+              <span className="text-slate-200 font-semibold">
+                {profile?.access_until ? format(parseISO(profile.access_until), 'dd/MM/yyyy') : 'data desconhecida'}
+              </span>.
+            </p>
+          </div>
+
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300">
+            Entre em contato com o suporte para renovar a sua licença de uso.
+          </div>
+
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-lg transition"
+          >
+            Sair da Conta
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
@@ -788,10 +890,27 @@ export default function Home() {
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
+            {profile?.access_until && (
+              <span className="ml-2 text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px]">
+                Acesso até: {format(parseISO(profile.access_until), 'dd/MM/yyyy')}
+              </span>
+            )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {profile?.is_admin && (
+            <button
+              onClick={() => {
+                setShowAdminModal(true)
+                fetchAdminUsers()
+              }}
+              className="text-xs bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 font-semibold px-3 py-2 rounded-lg transition"
+            >
+              👑 Gerenciar Licenças
+            </button>
+          )}
+
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -862,6 +981,94 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* MODAL ADMIN - GERENCIADOR DE USUÁRIOS */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-3xl w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
+                👑 Painel de Gerenciamento de Licenças
+              </h3>
+              <button
+                onClick={() => setShowAdminModal(false)}
+                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {loadingAdmin ? (
+              <p className="text-xs text-slate-400 text-center py-8">Carregando usuários...</p>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+                {allProfiles.map((p) => {
+                  const isValid = p.is_admin || (p.access_until && new Date(p.access_until) > new Date())
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white">{p.email}</span>
+                          {p.is_admin && (
+                            <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                              ADMIN
+                            </span>
+                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isValid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                            }`}
+                          >
+                            {isValid ? 'ATIVO' : 'BLOQUEADO'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Vencimento:{' '}
+                          <span className="text-slate-200">
+                            {p.access_until
+                              ? format(parseISO(p.access_until), 'dd/MM/yyyy HH:mm')
+                              : 'Sem limite (Vitalício)'}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => handleUpdateAccess(p.id, 30)}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
+                        >
+                          +30 Dias
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAccess(p.id, 60)}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
+                        >
+                          +60 Dias
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAccess(p.id, null)}
+                          className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
+                        >
+                          Vitalício
+                        </button>
+                        <button
+                          onClick={() => handleExpireAccess(p.id)}
+                          className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
+                        >
+                          Expirar
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal para Visualizar a Imagem do Gráfico */}
       {viewingImageUrl && (
@@ -1303,446 +1510,446 @@ export default function Home() {
         </main>
       ) : (
         <main className="max-w-7xl mx-auto mt-8 space-y-8">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-white">📅 Filtro de Período:</span>
-              <span className="text-xs text-slate-400 hidden sm:inline">
-                (Aplica no resumo, gráficos e lista)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">De:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value)
-                    setCalendarFilterDate('')
-                  }}
-                  className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">Até:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => {
-                    setEndDate(e.target.value)
-                    setCalendarFilterDate('')
-                  }}
-                  className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {(startDate || endDate || calendarFilterDate) && (
-                <button
-                  onClick={() => {
-                    setStartDate('')
-                    setEndDate('')
-                    setCalendarFilterDate('')
-                  }}
-                  className="text-xs text-rose-400 hover:underline px-2 py-1"
-                >
-                  Limpar Filtro
-                </button>
-              )}
-            </div>
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-white">📅 Filtro de Período:</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              (Aplica no resumo, gráficos e lista)
+            </span>
           </div>
 
-          {calendarFilterDate && (
-            <div className="bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-400 flex justify-between items-center">
-              <span>🔍 Filtrando apenas o dia: <strong className="text-white">{format(parseISO(calendarFilterDate), 'dd/MM/yyyy')}</strong> (selecionado no calendário)</span>
-              <button onClick={() => setCalendarFilterDate('')} className="underline hover:text-emerald-300 font-bold">
-                Remover Filtro de Dia
-              </button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-              <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
-              <p className={`text-2xl font-bold mt-1 ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                ${totalPnl.toFixed(2)}
-              </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">De:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  setCalendarFilterDate('')
+                }}
+                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-              <span className="text-xs text-slate-400 font-medium uppercase">Win Rate Global</span>
-              <p className="text-2xl font-bold text-blue-400 mt-1">{winRate}%</p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">Até:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  setCalendarFilterDate('')
+                }}
+                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-              <span className="text-xs text-slate-400 font-medium uppercase">Total de Trades</span>
-              <p className="text-2xl font-bold text-slate-100 mt-1">{totalTrades}</p>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-              <span className="text-xs text-slate-400 font-medium uppercase">Expectativa R</span>
-              <p className="text-2xl font-bold text-purple-400 mt-1">
-                {totalTrades > 0
-                  ? (
-                      filteredTrades.reduce((a, b) => a + (b.r_multiple || 0), 0) / totalTrades
-                    ).toFixed(2)
-                  : '0.00'}
-                R
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                🎯 Eficiência por Estratégia / Setup
-              </h2>
+            {(startDate || endDate || calendarFilterDate) && (
               <button
-                onClick={() => setShowCreateStratModal(true)}
-                className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg transition"
+                onClick={() => {
+                  setStartDate('')
+                  setEndDate('')
+                  setCalendarFilterDate('')
+                }}
+                className="text-xs text-rose-400 hover:underline px-2 py-1"
               >
-                Gerenciar Estratégias
+                Limpar Filtro
               </button>
-            </div>
-
-            {strategyStats.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">
-                Nenhuma operação cadastrada no período selecionado.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {strategyStats.map((st: any) => {
-                  const stratWinRate = ((st.wins / st.total) * 100).toFixed(1)
-                  return (
-                    <div key={st.name} className="bg-slate-950 border border-slate-800/80 p-4 rounded-lg space-y-2">
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span className="font-bold text-slate-100 text-sm">{st.name}</span>
-                        <span className="text-xs text-slate-400">{st.total} trades</span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                        <div>
-                          <span className="text-[10px] text-slate-500 uppercase block">Win Rate</span>
-                          <span className="text-sm font-bold text-blue-400">{stratWinRate}%</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 uppercase block">Lucro ($)</span>
-                          <span className={`text-sm font-bold ${st.pnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                            ${st.pnl.toFixed(2)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 uppercase block">Total (R)</span>
-                          <span className="text-sm font-bold text-purple-400">
-                            {st.totalR.toFixed(2)}R
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
             )}
           </div>
+        </div>
 
-          <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                  {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
-                </h2>
-                <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-slate-400">Data da Operação</label>
-                    <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-                  
-                  <div>
-                    <label className="text-xs text-slate-400">Workspace / Conta</label>
-                    <select value={targetWorkspaceId} onChange={e => setTargetWorkspaceId(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                      {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </select>
-                  </div>
+        {calendarFilterDate && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-400 flex justify-between items-center">
+            <span>🔍 Filtrando apenas o dia: <strong className="text-white">{format(parseISO(calendarFilterDate), 'dd/MM/yyyy')}</strong> (selecionado no calendário)</span>
+            <button onClick={() => setCalendarFilterDate('')} className="underline hover:text-emerald-300 font-bold">
+              Remover Filtro de Dia
+            </button>
+          </div>
+        )}
 
-                  <div>
-                    <label className="text-xs text-slate-400">Ativo (Par/Índice)</label>
-                    <input type="text" value={asset} onChange={e => setAsset(e.target.value)} placeholder="Ex: EURUSD, XAUUSD" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Direção</label>
-                    <select value={direction} onChange={e => setDirection(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                      <option value="BUY">Long (Buy)</option>
-                      <option value="SELL">Short (Sell)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs text-slate-400">Estratégia Utilizada</label>
-                      <button type="button" onClick={() => setShowCreateStratModal(true)} className="text-[10px] text-emerald-400 hover:underline">Gerenciar</button>
-                    </div>
-                    <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                      <option value="">Selecione...</option>
-                      {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Segui o operacional como deve ser feito?</label>
-                    <select value={followedPlan} onChange={e => setFollowedPlan(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                      <option value="DENTRO">✅ Dentro do Planejado</option>
-                      <option value="FORA">⚠️ Fora do Planejado</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Preço de Entrada</label>
-                    <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Preço Stop Loss</label>
-                    <input type="number" step="any" value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Ex: 1.08300" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Preço Take Profit</label>
-                    <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
-                    <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400">Risco/Retorno (R)</label>
-                    <input type="number" step="any" value={rMultiple} onChange={e => setRMultiple(e.target.value)} placeholder="Ex: 2.5 ou -1" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="text-xs text-slate-400">Link da Imagem (TradingView/Print)</label>
-                    <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
-                  </div>
-                </form>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800/80">
-                {editingTradeId && (
-                  <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
-                    Cancelar Edição
-                  </button>
-                )}
-                <button type="button" onClick={handleSubmitTrade} className="text-sm bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition">
-                  {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
-                  <h2 className="text-lg font-bold text-white">📖 Histórico de Operações</h2>
-                  {filteredTrades.length > 0 && (
-                    <button onClick={handleClearAllTrades} className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition">
-                      Limpar Tudo
-                    </button>
-                  )}
-                </div>
-                
-                <div className="overflow-x-auto min-h-[380px]">
-                  {paginatedTrades.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 text-sm">
-                      Nenhuma operação encontrada para o período/workspace selecionado.
-                    </div>
-                  ) : (
-                    <table className="w-full text-left text-sm text-slate-300">
-                      <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase">
-                        <tr>
-                          <th className="p-3 font-semibold">Data</th>
-                          <th className="p-3 font-semibold">Ativo</th>
-                          <th className="p-3 font-semibold">Dir</th>
-                          <th className="p-3 font-semibold">Plano</th>
-                          <th className="p-3 font-semibold">PnL ($)</th>
-                          <th className="p-3 font-semibold text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {paginatedTrades.map((trade) => (
-                          <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
-                            <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
-                            <td className="p-3 font-bold text-slate-200">
-                              <div className="flex items-center gap-1.5">
-                                <span>{trade.asset}</span>
-                                {trade.chart_url && (
-                                  <button
-                                    onClick={() => setViewingImageUrl(trade.chart_url!)}
-                                    className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded transition font-medium"
-                                    title="Ver Imagem do Gráfico"
-                                  >
-                                    📈 Gráfico
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-3">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                {trade.direction}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${trade.followed_plan === 'FORA' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                                {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Dentro'}
-                              </span>
-                            </td>
-                            <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
-                              ${trade.pnl.toFixed(2)}
-                            </td>
-                            <td className="p-3 text-right space-x-1">
-                              <button onClick={() => handleEditTrade(trade)} className="text-[11px] text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
-                                Editar
-                              </button>
-                              <button onClick={() => handleDeleteTrade(trade.id)} className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
-                                Excluir
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/80 text-xs text-slate-400">
-                <span>
-                  Mostrando página <strong className="text-slate-200">{currentPage}</strong> de <strong className="text-slate-200">{totalPages}</strong> ({filteredTrades.length} registros)
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+            <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
+            <p className={`text-2xl font-bold mt-1 ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+              ${totalPnl.toFixed(2)}
+            </p>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  📆 Calendário de Desempenho
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Clique em qualquer dia para filtrar e visualizar as operações dele no histórico acima.
-                </p>
-              </div>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+            <span className="text-xs text-slate-400 font-medium uppercase">Win Rate Global</span>
+            <p className="text-2xl font-bold text-blue-400 mt-1">{winRate}%</p>
+          </div>
 
-              <div className="flex items-center gap-3">
-                <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                  Mês: ${monthlyPnl.toFixed(2)}
-                </span>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+            <span className="text-xs text-slate-400 font-medium uppercase">Total de Trades</span>
+            <p className="text-2xl font-bold text-slate-100 mt-1">{totalTrades}</p>
+          </div>
 
-                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
-                    className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                  >
-                    ◀
-                  </button>
-                  <span className="text-xs font-bold text-slate-200 px-2 capitalize">
-                    {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
-                  </span>
-                  <button
-                    onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
-                    className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                  >
-                    ▶
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+            <span className="text-xs text-slate-400 font-medium uppercase">Expectativa R</span>
+            <p className="text-2xl font-bold text-purple-400 mt-1">
+              {totalTrades > 0
+                ? (
+                    filteredTrades.reduce((a, b) => a + (b.r_multiple || 0), 0) / totalTrades
+                  ).toFixed(2)
+                : '0.00'}
+              R
+            </p>
+          </div>
+        </div>
 
-            <div className="grid grid-cols-7 gap-1 md:gap-2">
-              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
-                  {day}
-                </div>
-              ))}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              🎯 Eficiência por Estratégia / Setup
+            </h2>
+            <button
+              onClick={() => setShowCreateStratModal(true)}
+              className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg transition"
+            >
+              Gerenciar Estratégias
+            </button>
+          </div>
 
-              {Array.from({ length: startDayOfWeek }).map((_, index) => (
-                <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
-              ))}
-
-              {daysInMonth.map((day) => {
-                const formattedDate = format(day, 'yyyy-MM-dd')
-                const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
-                const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
-                const hasTrades = dayTrades.length > 0
-
+          {strategyStats.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">
+              Nenhuma operação cadastrada no período selecionado.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {strategyStats.map((st: any) => {
+                const stratWinRate = ((st.wins / st.total) * 100).toFixed(1)
                 return (
-                  <div
-                    key={formattedDate}
-                    onClick={() => {
-                      setCalendarFilterDate(formattedDate)
-                      setCurrentPage(1)
-                      document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
-                    }}
-                    className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
-                      hasTrades
-                        ? dayPnl > 0
-                          ? 'bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/40'
-                          : dayPnl < 0
-                          ? 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-950/40'
-                          : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80'
-                        : 'bg-slate-950/60 border-slate-800/50 text-slate-600 hover:bg-slate-900/50'
-                    } ${calendarFilterDate === formattedDate ? 'ring-2 ring-emerald-400' : ''}`}
-                  >
-                    <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
+                  <div key={st.name} className="bg-slate-950 border border-slate-800/80 p-4 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                      <span className="font-bold text-slate-100 text-sm">{st.name}</span>
+                      <span className="text-xs text-slate-400">{st.total} trades</span>
+                    </div>
 
-                    {hasTrades && (
-                      <div className="mt-1">
-                        <span
-                          className={`text-xs md:text-sm font-bold block ${
-                            dayPnl > 0
-                              ? 'text-emerald-400'
-                              : dayPnl < 0
-                              ? 'text-rose-500'
-                              : 'text-slate-400'
-                          }`}
-                        >
-                          ${dayPnl.toFixed(2)}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium block">
-                          {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Win Rate</span>
+                        <span className="text-sm font-bold text-blue-400">{stratWinRate}%</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Lucro ($)</span>
+                        <span className={`text-sm font-bold ${st.pnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                          ${st.pnl.toFixed(2)}
                         </span>
                       </div>
-                    )}
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase block">Total (R)</span>
+                        <span className="text-sm font-bold text-purple-400">
+                          {st.totalR.toFixed(2)}R
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )
               })}
             </div>
+          )}
+        </div>
+
+        <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
+              </h2>
+              <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400">Data da Operação</label>
+                  <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-slate-400">Workspace / Conta</label>
+                  <select value={targetWorkspaceId} onChange={e => setTargetWorkspaceId(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                    {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Ativo (Par/Índice)</label>
+                  <input type="text" value={asset} onChange={e => setAsset(e.target.value)} placeholder="Ex: EURUSD, XAUUSD" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Direção</label>
+                  <select value={direction} onChange={e => setDirection(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                    <option value="BUY">Long (Buy)</option>
+                    <option value="SELL">Short (Sell)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs text-slate-400">Estratégia Utilizada</label>
+                    <button type="button" onClick={() => setShowCreateStratModal(true)} className="text-[10px] text-emerald-400 hover:underline">Gerenciar</button>
+                  </div>
+                  <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                    <option value="">Selecione...</option>
+                    {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Segui o operacional como deve ser feito?</label>
+                  <select value={followedPlan} onChange={e => setFollowedPlan(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
+                    <option value="DENTRO">✅ Dentro do Planejado</option>
+                    <option value="FORA">⚠️ Fora do Planejado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Preço de Entrada</label>
+                  <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Preço Stop Loss</label>
+                  <input type="number" step="any" value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Ex: 1.08300" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Preço Take Profit</label>
+                  <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
+                  <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Risco/Retorno (R)</label>
+                  <input type="number" step="any" value={rMultiple} onChange={e => setRMultiple(e.target.value)} placeholder="Ex: 2.5 ou -1" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-xs text-slate-400">Link da Imagem (TradingView/Print)</label>
+                  <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
+                </div>
+              </form>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800/80">
+              {editingTradeId && (
+                <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
+                  Cancelar Edição
+                </button>
+              )}
+              <button type="button" onClick={handleSubmitTrade} className="text-sm bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition">
+                {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
+              </button>
+            </div>
           </div>
-        </main>
+
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
+                <h2 className="text-lg font-bold text-white">📖 Histórico de Operações</h2>
+                {filteredTrades.length > 0 && (
+                  <button onClick={handleClearAllTrades} className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition">
+                    Limpar Tudo
+                  </button>
+                )}
+              </div>
+              
+              <div className="overflow-x-auto min-h-[380px]">
+                {paginatedTrades.length === 0 ? (
+                  <div className="p-12 text-center text-slate-500 text-sm">
+                    Nenhuma operação encontrada para o período/workspace selecionado.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase">
+                      <tr>
+                        <th className="p-3 font-semibold">Data</th>
+                        <th className="p-3 font-semibold">Ativo</th>
+                        <th className="p-3 font-semibold">Dir</th>
+                        <th className="p-3 font-semibold">Plano</th>
+                        <th className="p-3 font-semibold">PnL ($)</th>
+                        <th className="p-3 font-semibold text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {paginatedTrades.map((trade) => (
+                        <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
+                          <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
+                          <td className="p-3 font-bold text-slate-200">
+                            <div className="flex items-center gap-1.5">
+                              <span>{trade.asset}</span>
+                              {trade.chart_url && (
+                                <button
+                                  onClick={() => setViewingImageUrl(trade.chart_url!)}
+                                  className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded transition font-medium"
+                                  title="Ver Imagem do Gráfico"
+                                >
+                                  📈 Gráfico
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                              {trade.direction}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${trade.followed_plan === 'FORA' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                              {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Dentro'}
+                            </span>
+                          </td>
+                          <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+                            ${trade.pnl.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right space-x-1">
+                            <button onClick={() => handleEditTrade(trade)} className="text-[11px] text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
+                              Editar
+                            </button>
+                            <button onClick={() => handleDeleteTrade(trade.id)} className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
+                              Excluir
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/80 text-xs text-slate-400">
+              <span>
+                Mostrando página <strong className="text-slate-200">{currentPage}</strong> de <strong className="text-slate-200">{totalPages}</strong> ({filteredTrades.length} registros)
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                📆 Calendário de Desempenho
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Clique em qualquer dia para filtrar e visualizar as operações dele no histórico acima.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                Mês: ${monthlyPnl.toFixed(2)}
+              </span>
+
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                <button
+                  onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ◀
+                </button>
+                <span className="text-xs font-bold text-slate-200 px-2 capitalize">
+                  {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <button
+                  onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
+                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                >
+                  ▶
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 md:gap-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
+                {day}
+              </div>
+            ))}
+
+            {Array.from({ length: startDayOfWeek }).map((_, index) => (
+              <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
+            ))}
+
+            {daysInMonth.map((day) => {
+              const formattedDate = format(day, 'yyyy-MM-dd')
+              const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
+              const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+              const hasTrades = dayTrades.length > 0
+
+              return (
+                <div
+                  key={formattedDate}
+                  onClick={() => {
+                    setCalendarFilterDate(formattedDate)
+                    setCurrentPage(1)
+                    document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
+                    hasTrades
+                      ? dayPnl > 0
+                        ? 'bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/40'
+                        : dayPnl < 0
+                        ? 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-950/40'
+                        : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80'
+                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600 hover:bg-slate-900/50'
+                  } ${calendarFilterDate === formattedDate ? 'ring-2 ring-emerald-400' : ''}`}
+                >
+                  <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
+
+                  {hasTrades && (
+                    <div className="mt-1">
+                      <span
+                        className={`text-xs md:text-sm font-bold block ${
+                          dayPnl > 0
+                            ? 'text-emerald-400'
+                            : dayPnl < 0
+                            ? 'text-rose-500'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        ${dayPnl.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium block">
+                        {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </main>
       )}
     </div>
   )
