@@ -61,7 +61,10 @@ export default function Home() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [loadingAuth, setLoadingAuth] = useState(false)
 
   // Workspaces States
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -108,11 +111,11 @@ export default function Home() {
   const [targetWorkspaceId, setTargetWorkspaceId] = useState<string>('')
 
   // --- Estados do Painel de Simulação de Monte Carlo estilo FTMO ---
-  const [mcCapital, setMcCapital] = useState('50000') 
-  const [mcWinRate, setMcWinRate] = useState('50') 
-  const [mcRrr, setMcRrr] = useState('1.00') 
-  const [mcIterations, setMcIterations] = useState('100') 
-  const [mcLines, setMcLines] = useState('10') 
+  const [mcCapital, setMcCapital] = useState('50000')
+  const [mcWinRate, setMcWinRate] = useState('50')
+  const [mcRrr, setMcRrr] = useState('1.00')
+  const [mcIterations, setMcIterations] = useState('100')
+  const [mcLines, setMcLines] = useState('10')
   const [mcRiskMode, setMcRiskMode] = useState<'percent' | 'risk'>('percent')
   const [mcRiskPercent, setMcRiskPercent] = useState('0.25')
   const [mcResults, setMcResults] = useState<any | null>(null)
@@ -263,14 +266,44 @@ export default function Home() {
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault()
     setAuthError('')
+    setAuthSuccess('')
+    setLoadingAuth(true)
 
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) setAuthError(error.message)
-      else alert('Conta criada com sucesso!')
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setAuthError(error.message)
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password })
+        if (error) setAuthError(error.message)
+        else setAuthSuccess('Conta criada com sucesso! Verifique seu e-mail para confirmar.')
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) setAuthError(error.message)
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Erro ao processar autenticação.')
+    } finally {
+      setLoadingAuth(false)
+    }
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    setLoadingAuth(true)
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+      })
+      if (error) {
+        setAuthError(error.message)
+      } else {
+        setAuthSuccess('E-mail de recuperação enviado! Verifique sua caixa de entrada e spam.')
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Erro ao solicitar redefinição de senha.')
+    } finally {
+      setLoadingAuth(false)
     }
   }
 
@@ -432,7 +465,7 @@ export default function Home() {
     setNotes(trade.notes || '')
     setFollowedPlan(trade.followed_plan || 'DENTRO')
     setTargetWorkspaceId(trade.workspace_id)
-    
+
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -500,7 +533,7 @@ export default function Home() {
     const riskPct = parseFloat(mcRiskPercent) || 0.25
 
     const colorPalette = [
-      '#eab308', '#a855f7', '#22c55e', '#3b82f6', '#ec4899', 
+      '#eab308', '#a855f7', '#22c55e', '#3b82f6', '#ec4899',
       '#f97316', '#06b6d4', '#84cc16', '#6366f1', '#ef4444'
     ]
 
@@ -618,7 +651,11 @@ export default function Home() {
               📊 TRADER DASHBOARD
             </h1>
             <p className="text-xs text-slate-400">
-              {isSignUp ? 'Crie sua conta com e-mail' : 'Entre no seu diário de operações'}
+              {isForgotPassword
+                ? 'Informe o e-mail cadastrado para redefinir a senha'
+                : isSignUp
+                ? 'Crie sua conta com e-mail'
+                : 'Entre no seu diário de operações'}
             </p>
           </div>
 
@@ -628,59 +665,121 @@ export default function Home() {
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label className="text-xs text-slate-400">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
-                required
-              />
+          {authSuccess && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-lg text-center">
+              {authSuccess}
             </div>
+          )}
 
-            <div>
-              <label className="text-xs text-slate-400">Senha</label>
-              <div className="relative mt-1">
+          {isForgotPassword ? (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">E-mail Cadastrado</label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
                   required
                 />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loadingAuth}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50"
+              >
+                {loadingAuth ? 'Enviando...' : 'Enviar Link de Recuperação'}
+              </button>
+
+              <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
+                  onClick={() => {
+                    setIsForgotPassword(false)
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className="text-xs text-slate-400 hover:text-emerald-400 transition"
                 >
-                  {showPassword ? '🙈' : '👁️'}
+                  ← Voltar para o Login
                 </button>
               </div>
-            </div>
+            </form>
+          ) : (
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400">E-mail</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  required
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm"
-            >
-              {isSignUp ? 'Criar Conta' : 'Entrar no Dashboard'}
-            </button>
-          </form>
+              <div>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-slate-400">Senha</label>
+                  {!isSignUp && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true)
+                        setAuthError('')
+                        setAuthSuccess('')
+                      }}
+                      className="text-[11px] text-emerald-400 hover:underline"
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  )}
+                </div>
+                <div className="relative mt-1">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm"
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
 
-          <div className="text-center">
-            <button
-              onClick={() => {
-                setIsSignUp(!isSignUp)
-                setAuthError('')
-              }}
-              className="text-xs text-slate-400 hover:text-emerald-400 transition"
-            >
-              {isSignUp ? 'Já tem uma conta? Faça Login' : 'Não tem conta? Cadastre-se'}
-            </button>
-          </div>
+              <button
+                type="submit"
+                disabled={loadingAuth}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50"
+              >
+                {loadingAuth ? 'Carregando...' : isSignUp ? 'Criar Conta' : 'Entrar no Dashboard'}
+              </button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(!isSignUp)
+                    setAuthError('')
+                    setAuthSuccess('')
+                  }}
+                  className="text-xs text-slate-400 hover:text-emerald-400 transition"
+                >
+                  {isSignUp ? 'Já tem uma conta? Faça Login' : 'Não tem conta? Cadastre-se'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     )
@@ -689,14 +788,14 @@ export default function Home() {
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
-    
+
     if (calendarFilterDate) {
       matchDate = t.trade_date === calendarFilterDate
     } else {
       if (startDate) matchDate = matchDate && t.trade_date >= startDate
       if (endDate) matchDate = matchDate && t.trade_date <= endDate
     }
-    
+
     return matchWs && matchDate
   })
 
@@ -856,13 +955,9 @@ export default function Home() {
                 alt="Gráfico da Operação"
                 className="max-w-full max-h-[70vh] object-contain rounded"
                 onError={(e) => {
-                  // Fallback visual caso o link seja um link comum do TradingView (que não é uma imagem direta .png/.jpg)
                   (e.target as HTMLElement).style.display = 'none'
                 }}
               />
-              <div className="absolute text-center p-6 text-slate-400 text-xs hidden data-[broken=true]:block" data-broken="false">
-                Este link pode ser uma página interativa do TradingView em vez de um arquivo direto de imagem. Clique em &quot;Abrir no Navegador&quot; acima para visualizá-lo perfeitamente.
-              </div>
             </div>
           </div>
         </div>
@@ -905,806 +1000,410 @@ export default function Home() {
         </div>
       )}
 
-      {showCreateStratModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full space-y-4">
-            <h3 className="text-lg font-bold text-white">Gerenciar Estratégias / Setups</h3>
-            
-            <form onSubmit={handleCreateStrategy} className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-400">Nova Estratégia</label>
-                <div className="flex gap-2 mt-1">
+      {/* Conteúdo Principal */}
+      <main className="max-w-7xl mx-auto mt-6 space-y-6">
+        {activeTab === 'dashboard' ? (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
+                <p className="text-xs text-slate-400 uppercase font-semibold">Total de Trades</p>
+                <p className="text-2xl font-black text-white">{totalTrades}</p>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
+                <p className="text-xs text-slate-400 uppercase font-semibold">Resultado Acumulado (PnL)</p>
+                <p className={`text-2xl font-black ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`}
+                </p>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
+                <p className="text-xs text-slate-400 uppercase font-semibold">Taxa de Acerto (Win Rate)</p>
+                <p className="text-2xl font-black text-white">{winRate}%</p>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
+                <p className="text-xs text-slate-400 uppercase font-semibold">Resultado Mensal</p>
+                <p className={`text-2xl font-black ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {monthlyPnl >= 0 ? `+$${monthlyPnl.toFixed(2)}` : `-$${Math.abs(monthlyPnl).toFixed(2)}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Form de Cadastro/Edição de Trade */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <h2 className="text-sm font-bold text-white flex items-center justify-between">
+                <span>{editingTradeId ? '✏️ Editar Operação' : '➕ Registrar Nova Operação'}</span>
+                {editingTradeId && (
+                  <button onClick={resetForm} className="text-xs text-slate-400 hover:text-white underline">
+                    Cancelar Edição
+                  </button>
+                )}
+              </h2>
+
+              <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400">Ativo</label>
                   <input
                     type="text"
-                    value={newStrategyName}
-                    onChange={(e) => setNewStrategyName(e.target.value)}
-                    placeholder="Ex: FVG + OB, Liquidity Sweep..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    value={asset}
+                    onChange={(e) => setAsset(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
                     required
                   />
-                  <button
-                    type="submit"
-                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 rounded-lg text-xs transition"
-                  >
-                    Adicionar
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            <div className="border-t border-slate-800 pt-3">
-              <span className="text-xs text-slate-400 block mb-2">Estratégias Cadastradas:</span>
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                {strategies.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">Nenhuma estratégia cadastrada.</p>
-                ) : (
-                  strategies.map(s => (
-                    <div key={s.id} className="flex items-center justify-between bg-slate-950 border border-slate-800/80 p-2.5 rounded-lg text-sm">
-                      <span className="text-slate-200 font-medium">{s.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteStrategy(s.id, s.name)}
-                        className="text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded transition font-semibold"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateStratModal(false)}
-                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-2.5 rounded-lg font-semibold"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'montecarlo' ? (
-        <main className="max-w-7xl mx-auto mt-8 space-y-8">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                🎲 Simulador de Monte Carlo (Estilo FTMO)
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Simule múltiplas trajetórias de equidade com base no capital, assertividade e taxa de risco configurados.
-              </p>
-            </div>
-
-            <form onSubmit={runMonteCarloSimulation} className="space-y-6 bg-slate-950 p-6 rounded-xl border border-slate-800/80">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
-                    <span>Capital</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-                    <button type="button" onClick={() => setMcCapital(Math.max(1000, (parseFloat(mcCapital) || 50000) - 5000).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
-                    <input
-                      type="number"
-                      step="any"
-                      value={mcCapital}
-                      onChange={(e) => setMcCapital(e.target.value)}
-                      className="w-28 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                      required
-                    />
-                    <button type="button" onClick={() => setMcCapital(((parseFloat(mcCapital) || 50000) + 5000).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
-                    <span>Rácio de ganhos</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-                    <button type="button" onClick={() => setMcWinRate(Math.max(1, (parseFloat(mcWinRate) || 50) - 5).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
-                    <input
-                      type="number"
-                      step="any"
-                      value={mcWinRate}
-                      onChange={(e) => setMcWinRate(e.target.value)}
-                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                      required
-                    />
-                    <button type="button" onClick={() => setMcWinRate(Math.min(99, (parseFloat(mcWinRate) || 50) + 5).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
-                    <span>RRR (Risco/Retorno)</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-                    <button type="button" onClick={() => setMcRrr(Math.max(0.1, (parseFloat(mcRrr) || 1.0) - 0.1).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
-                    <input
-                      type="number"
-                      step="any"
-                      value={mcRrr}
-                      onChange={(e) => setMcRrr(e.target.value)}
-                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                      required
-                    />
-                    <button type="button" onClick={() => setMcRrr(((parseFloat(mcRrr) || 1.0) + 0.1).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
-                    <span>Iterações</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-                    <button type="button" onClick={() => setMcIterations(Math.max(10, (parseInt(mcIterations) || 100) - 10).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
-                    <input
-                      type="number"
-                      value={mcIterations}
-                      onChange={(e) => setMcIterations(e.target.value)}
-                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                      required
-                    />
-                    <button type="button" onClick={() => setMcIterations(((parseInt(mcIterations) || 100) + 10).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center text-xs text-slate-400 mb-1">
-                    <span>Linhas (Caminhos)</span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
-                    <button type="button" onClick={() => setMcLines(Math.max(1, (parseInt(mcLines) || 10) - 1).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">◀</button>
-                    <input
-                      type="number"
-                      value={mcLines}
-                      onChange={(e) => setMcLines(e.target.value)}
-                      className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                      required
-                    />
-                    <button type="button" onClick={() => setMcLines(((parseInt(mcLines) || 10) + 1).toString())} className="text-emerald-400 hover:text-emerald-300 font-bold px-1 text-sm">▶</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-800 pt-4">
-                <span className="text-xs text-slate-400 block mb-2">Tipo de Risco</span>
-                <div className="grid grid-cols-2 gap-4 max-w-lg">
-                  <button
-                    type="button"
-                    onClick={() => setMcRiskMode('percent')}
-                    className={`py-3 px-4 rounded-xl font-bold text-xs transition border ${
-                      mcRiskMode === 'percent'
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg shadow-emerald-500/20'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    Percentagem de Risco
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMcRiskMode('risk')}
-                    className={`py-3 px-4 rounded-xl font-bold text-xs transition border ${
-                      mcRiskMode === 'risk'
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg'
-                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                    }`}
-                  >
-                    Risco
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-xs text-slate-400 block mb-1">Percentagem</span>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 max-w-xs flex items-center justify-between">
-                  <button type="button" onClick={() => setMcRiskPercent(Math.max(0.01, (parseFloat(mcRiskPercent) || 0.25) - 0.05).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">◀</button>
-                  <input
-                    type="number"
-                    step="any"
-                    value={mcRiskPercent}
-                    onChange={(e) => setMcRiskPercent(e.target.value)}
-                    className="w-24 bg-transparent text-center font-bold text-emerald-400 text-sm focus:outline-none"
-                    required
-                  />
-                  <span className="text-emerald-400 font-bold">%</span>
-                  <button type="button" onClick={() => setMcRiskPercent(((parseFloat(mcRiskPercent) || 0.25) + 0.05).toFixed(2))} className="text-emerald-400 hover:text-emerald-300 font-bold px-2">▶</button>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-6 rounded-xl transition text-sm shadow-xl shadow-blue-600/20"
-                >
-                  Executar
-                </button>
-              </div>
-            </form>
-
-            {mcResults && (
-              <div className="space-y-6 pt-6 border-t border-slate-800">
-                <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl space-y-4 shadow-2xl">
-                  <div className="flex justify-end gap-2 text-slate-400 text-xs">
-                    <button type="button" onClick={() => runMonteCarloSimulation()} className="p-1 hover:text-white" title="Atualizar / Recalcular">🔄</button>
-                  </div>
-
-                  <div className="relative h-96 bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-end">
-                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4">
-                      {[0, 1, 2, 3, 4].map((i) => {
-                        const val = mcResults.minEquity + ((mcResults.maxEquity - mcResults.minEquity) / 4) * (4 - i)
-                        return (
-                          <div key={i} className="border-b border-slate-800/80 w-full flex justify-between items-center text-[10px] text-slate-500">
-                            <span>{val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="absolute left-4 top-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)] overflow-visible">
-                      {(() => {
-                        const minEq = mcResults.minEquity
-                        const maxEq = mcResults.maxEquity === minEq ? minEq + 1000 : mcResults.maxEquity
-                        const spanEq = maxEq - minEq
-
-                        return (
-                          <>
-                            {mcResults.paths.map((path: any[], pIdx: number) => {
-                              const pointsStr = path.map((pt, i) => {
-                                const x = (i / mcResults.iterations) * 1000
-                                const y = 400 - ((pt.equity - minEq) / spanEq) * 400
-                                return `${x},${y}`
-                              }).join(' ')
-
-                              const color = mcResults.colorPalette[pIdx % mcResults.colorPalette.length]
-
-                              return (
-                                <polyline
-                                  key={pIdx}
-                                  fill="none"
-                                  stroke={color}
-                                  strokeWidth="2"
-                                  strokeOpacity="0.85"
-                                  points={pointsStr}
-                                />
-                              )
-                            })}
-
-                            {mcResults.averagePath && (
-                              <>
-                                <polyline
-                                  fill="none"
-                                  stroke="#000000"
-                                  strokeWidth="4"
-                                  points={mcResults.averagePath.map((pt: any, i: number) => {
-                                    const x = (i / mcResults.iterations) * 1000
-                                    const y = 400 - ((pt.equity - minEq) / spanEq) * 400
-                                    return `${x},${y}`
-                                  }).join(' ')}
-                                />
-                                <polyline
-                                  fill="none"
-                                  stroke="#ffffff"
-                                  strokeWidth="2"
-                                  strokeDasharray="4,4"
-                                  points={mcResults.averagePath.map((pt: any, i: number) => {
-                                    const x = (i / mcResults.iterations) * 1000
-                                    const y = 400 - ((pt.equity - minEq) / spanEq) * 400
-                                    return `${x},${y}`
-                                  }).join(' ')}
-                                />
-                              </>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </svg>
-                  </div>
-
-                  <div className="flex justify-between text-[11px] text-slate-400 px-1">
-                    <span>0</span>
-                    <span>Número de trades</span>
-                    <span>{mcResults.iterations}</span>
-                  </div>
-
-                  <div className="text-center text-xs text-slate-300 font-medium pt-2">
-                    A linha pontilhada/preta reflete a média do resultado das outras curvas
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-                  <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800 text-sm">
-                    <div className="divide-y divide-slate-800">
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Equidade mínima</span>
-                        <span className="font-bold text-white">{mcResults.minEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Equidade máxima</span>
-                        <span className="font-bold text-white">{mcResults.maxEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Máximo de ganhos consecutivos</span>
-                        <span className="font-bold text-emerald-400">{mcResults.maxWinStreak}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Máximo de perdas consecutivas</span>
-                        <span className="font-bold text-rose-500">{mcResults.maxLossStreak}</span>
-                      </div>
-                    </div>
-
-                    <div className="divide-y divide-slate-800">
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Drawdown Máximo</span>
-                        <span className="font-bold text-amber-400">{mcResults.maxDrawdown.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Média de drawdown</span>
-                        <span className="font-bold text-amber-400/80">{mcResults.avgDrawdown.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 hover:bg-slate-800/30 transition">
-                        <span className="text-slate-300">Média máxima de drawdown</span>
-                        <span className="font-bold text-amber-400">{(mcResults.maxDrawdown * 0.85).toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 opacity-0 pointer-events-none md:opacity-100">
-                        <span className="text-slate-500">-</span>
-                        <span className="text-slate-500">-</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </main>
-      ) : (
-        <main className="max-w-7xl mx-auto mt-8 space-y-8">
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-white">📅 Filtro de Período:</span>
-            <span className="text-xs text-slate-400 hidden sm:inline">
-              (Aplica no resumo, gráficos e lista)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">De:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value)
-                  setCalendarFilterDate('')
-                }}
-                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">Até:</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value)
-                  setCalendarFilterDate('')
-                }}
-                className="bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            {(startDate || endDate || calendarFilterDate) && (
-              <button
-                onClick={() => {
-                  setStartDate('')
-                  setEndDate('')
-                  setCalendarFilterDate('')
-                }}
-                className="text-xs text-rose-400 hover:underline px-2 py-1"
-              >
-                Limpar Filtro
-              </button>
-            )}
-          </div>
-        </div>
-
-        {calendarFilterDate && (
-          <div className="bg-emerald-950/40 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-400 flex justify-between items-center">
-            <span>🔍 Filtrando apenas o dia: <strong className="text-white">{format(parseISO(calendarFilterDate), 'dd/MM/yyyy')}</strong> (selecionado no calendário)</span>
-            <button onClick={() => setCalendarFilterDate('')} className="underline hover:text-emerald-300 font-bold">
-              Remover Filtro de Dia
-            </button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs text-slate-400 font-medium uppercase">Resultado Total</span>
-            <p className={`text-2xl font-bold mt-1 ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-              ${totalPnl.toFixed(2)}
-            </p>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs text-slate-400 font-medium uppercase">Win Rate Global</span>
-            <p className="text-2xl font-bold text-blue-400 mt-1">{winRate}%</p>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs text-slate-400 font-medium uppercase">Total de Trades</span>
-            <p className="text-2xl font-bold text-slate-100 mt-1">{totalTrades}</p>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs text-slate-400 font-medium uppercase">Expectativa R</span>
-            <p className="text-2xl font-bold text-purple-400 mt-1">
-              {totalTrades > 0
-                ? (
-                    filteredTrades.reduce((a, b) => a + (b.r_multiple || 0), 0) / totalTrades
-                  ).toFixed(2)
-                : '0.00'}
-              R
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              🎯 Eficiência por Estratégia / Setup
-            </h2>
-            <button
-              onClick={() => setShowCreateStratModal(true)}
-              className="text-xs bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg transition"
-            >
-              Gerenciar Estratégias
-            </button>
-          </div>
-
-          {strategyStats.length === 0 ? (
-            <p className="text-xs text-slate-500 py-4 text-center">
-              Nenhuma operação cadastrada no período selecionado.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {strategyStats.map((st: any) => {
-                const stratWinRate = ((st.wins / st.total) * 100).toFixed(1)
-                return (
-                  <div key={st.name} className="bg-slate-950 border border-slate-800/80 p-4 rounded-lg space-y-2">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                      <span className="font-bold text-slate-100 text-sm">{st.name}</span>
-                      <span className="text-xs text-slate-400">{st.total} trades</span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                      <div>
-                        <span className="text-[10px] text-slate-500 uppercase block">Win Rate</span>
-                        <span className="text-sm font-bold text-blue-400">{stratWinRate}%</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 uppercase block">Lucro ($)</span>
-                        <span className={`text-sm font-bold ${st.pnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                          ${st.pnl.toFixed(2)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-500 uppercase block">Total (R)</span>
-                        <span className="text-sm font-bold text-purple-400">
-                          {st.totalR.toFixed(2)}R
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div id="historico-container" className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                {editingTradeId ? '✏️ Editar Operação' : '📝 Registrar Nova Operação'}
-              </h2>
-              <form onSubmit={handleSubmitTrade} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-400">Data da Operação</label>
-                  <input type="date" value={tradeDate} onChange={e => setTradeDate(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-slate-400">Workspace / Conta</label>
-                  <select value={targetWorkspaceId} onChange={e => setTargetWorkspaceId(e.target.value)} required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                    {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-slate-400">Ativo (Par/Índice)</label>
-                  <input type="text" value={asset} onChange={e => setAsset(e.target.value)} placeholder="Ex: EURUSD, XAUUSD" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
                 </div>
 
                 <div>
                   <label className="text-xs text-slate-400">Direção</label>
-                  <select value={direction} onChange={e => setDirection(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                    <option value="BUY">Long (Buy)</option>
-                    <option value="SELL">Short (Sell)</option>
+                  <select
+                    value={direction}
+                    onChange={(e) => setDirection(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                  >
+                    <option value="BUY">🟢 COMPRA (BUY)</option>
+                    <option value="SELL">🔴 VENDA (SELL)</option>
                   </select>
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs text-slate-400">Estratégia Utilizada</label>
-                    <button type="button" onClick={() => setShowCreateStratModal(true)} className="text-[10px] text-emerald-400 hover:underline">Gerenciar</button>
-                  </div>
-                  <select value={strategyName} onChange={e => setStrategyName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                    <option value="">Selecione...</option>
-                    {strategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  <label className="text-xs text-slate-400">Estratégia / Setup</label>
+                  <select
+                    value={strategyName}
+                    onChange={(e) => setStrategyName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  >
+                    <option value="">-- Selecione ou Crie --</option>
+                    {strategies.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-400">Segui o operacional como deve ser feito?</label>
-                  <select value={followedPlan} onChange={e => setFollowedPlan(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1">
-                    <option value="DENTRO">✅ Dentro do Planejado</option>
-                    <option value="FORA">⚠️ Fora do Planejado</option>
+                  <label className="text-xs text-slate-400">Data do Trade</label>
+                  <input
+                    type="date"
+                    value={tradeDate}
+                    onChange={(e) => setTradeDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Resultado ($ PnL)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pnl}
+                    onChange={(e) => setPnl(e.target.value)}
+                    placeholder="Ex: 268.56 ou -50"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Retorno R (R:R)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={rMultiple}
+                    onChange={(e) => setRMultiple(e.target.value)}
+                    placeholder="Ex: 2.5 ou -1"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Link do Gráfico (TradingView)</label>
+                  <input
+                    type="url"
+                    value={chartUrl}
+                    onChange={(e) => setChartUrl(e.target.value)}
+                    placeholder="https://www.tradingview.com/x/..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400">Plano de Trade</label>
+                  <select
+                    value={followedPlan}
+                    onChange={(e) => setFollowedPlan(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                  >
+                    <option value="DENTRO">✅ Seguiu o Plano</option>
+                    <option value="FORA">❌ Fora do Plano</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs text-slate-400">Preço de Entrada</label>
-                  <input type="number" step="any" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="Ex: 1.08500" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
+                <div className="md:col-span-4">
+                  <label className="text-xs text-slate-400">Anotações / Notas</label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Contexto da entrada, gatilho, sentimentos..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1"
+                  />
                 </div>
 
-                <div>
-                  <label className="text-xs text-slate-400">Preço Stop Loss</label>
-                  <input type="number" step="any" value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Ex: 1.08300" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-
-                <div>
-                  <label className="text-xs text-slate-400">Preço Take Profit</label>
-                  <input type="number" step="any" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Ex: 1.09100" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-
-                <div>
-                  <label className="text-xs text-slate-400">PnL (Financeiro em $)</label>
-                  <input type="number" step="any" value={pnl} onChange={e => setPnl(e.target.value)} required placeholder="Ex: 250.00 ou -50.00" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-
-                <div>
-                  <label className="text-xs text-slate-400">Risco/Retorno (R)</label>
-                  <input type="number" step="any" value={rMultiple} onChange={e => setRMultiple(e.target.value)} placeholder="Ex: 2.5 ou -1" className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs text-slate-400">Link da Imagem (TradingView/Print)</label>
-                  <input type="url" value={chartUrl} onChange={e => setChartUrl(e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1" />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs text-slate-400">Anotações do Trade (Lições, Emoções...)</label>
-                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 resize-none"></textarea>
+                <div className="md:col-span-4 flex justify-end">
+                  <button
+                    type="submit"
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition text-sm"
+                  >
+                    {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
+                  </button>
                 </div>
               </form>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800/80">
-              {editingTradeId && (
-                <button type="button" onClick={resetForm} className="text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-5 py-2.5 rounded-lg transition">
-                  Cancelar Edição
-                </button>
-              )}
-              <button type="button" onClick={handleSubmitTrade} className="text-sm bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition">
-                {editingTradeId ? 'Atualizar Operação' : 'Salvar Operação'}
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
-                <h2 className="text-lg font-bold text-white">📖 Histórico de Operações</h2>
-                {filteredTrades.length > 0 && (
-                  <button onClick={handleClearAllTrades} className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition">
-                    Limpar Tudo
+            {/* Tabela de Operações */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h2 className="text-sm font-bold text-white">📜 Histórico de Operações</h2>
+                {trades.length > 0 && (
+                  <button
+                    onClick={handleClearAllTrades}
+                    className="text-xs text-rose-400 hover:text-rose-300 font-semibold underline"
+                  >
+                    Limpar Operações
                   </button>
                 )}
               </div>
-              
-              <div className="overflow-x-auto min-h-[380px]">
-                {paginatedTrades.length === 0 ? (
-                  <div className="p-12 text-center text-slate-500 text-sm">
-                    Nenhuma operação encontrada para o período/workspace selecionado.
-                  </div>
-                ) : (
-                  <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase">
+
+              {loadingTrades ? (
+                <p className="text-xs text-slate-400 py-4 text-center">Carregando histórico...</p>
+              ) : paginatedTrades.length === 0 ? (
+                <p className="text-xs text-slate-400 py-4 text-center">Nenhuma operação registrada ainda.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                       <tr>
-                        <th className="p-3 font-semibold">Data</th>
-                        <th className="p-3 font-semibold">Ativo</th>
-                        <th className="p-3 font-semibold">Dir</th>
-                        <th className="p-3 font-semibold">Plano</th>
-                        <th className="p-3 font-semibold">PnL ($)</th>
-                        <th className="p-3 font-semibold text-right">Ações</th>
+                        <th className="p-3">Data</th>
+                        <th className="p-3">Ativo</th>
+                        <th className="p-3">Lado</th>
+                        <th className="p-3">Estratégia</th>
+                        <th className="p-3">PnL ($)</th>
+                        <th className="p-3">Retorno (R)</th>
+                        <th className="p-3">Plano</th>
+                        <th className="p-3">Gráfico</th>
+                        <th className="p-3 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
-                      {paginatedTrades.map((trade) => (
-                        <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
-                          <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
-                          <td className="p-3 font-bold text-slate-200">
-                            <div className="flex items-center gap-1.5">
-                              <span>{trade.asset}</span>
-                              {trade.chart_url && (
-                                <button
-                                  onClick={() => setViewingImageUrl(trade.chart_url!)}
-                                  className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded transition font-medium"
-                                  title="Ver Imagem do Gráfico"
-                                >
-                                  📈 Gráfico
-                                </button>
-                              )}
-                            </div>
+                      {paginatedTrades.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-800/30 transition">
+                          <td className="p-3 text-slate-300 font-medium">{t.trade_date}</td>
+                          <td className="p-3 font-bold text-white">{t.asset}</td>
+                          <td className="p-3 font-semibold">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] ${
+                                t.direction === 'BUY'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              }`}
+                            >
+                              {t.direction}
+                            </span>
                           </td>
+                          <td className="p-3 text-slate-400">{t.strategy_name || '-'}</td>
+                          <td
+                            className={`p-3 font-bold ${
+                              t.pnl > 0
+                                ? 'text-emerald-400'
+                                : t.pnl < 0
+                                ? 'text-rose-400'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {t.pnl > 0 ? `+$${t.pnl.toFixed(2)}` : `$${t.pnl.toFixed(2)}`}
+                          </td>
+                          <td className="p-3 text-slate-300 font-semibold">{t.r_multiple}R</td>
                           <td className="p-3">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                              {trade.direction}
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] ${
+                                t.followed_plan === 'DENTRO'
+                                  ? 'bg-emerald-500/10 text-emerald-400'
+                                  : 'bg-rose-500/10 text-rose-400'
+                              }`}
+                            >
+                              {t.followed_plan === 'DENTRO' ? '✓ Plano' : '✕ Fora'}
                             </span>
                           </td>
                           <td className="p-3">
-                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${trade.followed_plan === 'FORA' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                              {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Dentro'}
-                            </span>
+                            {t.chart_url ? (
+                              <button
+                                onClick={() => setViewingImageUrl(t.chart_url || null)}
+                                className="text-emerald-400 hover:underline font-medium"
+                              >
+                                Ver Gráfico
+                              </button>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
                           </td>
-                          <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
-                            ${trade.pnl.toFixed(2)}
-                          </td>
-                          <td className="p-3 text-right space-x-1">
-                            <button onClick={() => handleEditTrade(trade)} className="text-[11px] text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
-                              Editar
+                          <td className="p-3 text-right space-x-2">
+                            <button
+                              onClick={() => handleEditTrade(t)}
+                              className="text-slate-400 hover:text-white transition"
+                              title="Editar"
+                            >
+                              ✏️
                             </button>
-                            <button onClick={() => handleDeleteTrade(trade.id)} className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
-                              Excluir
+                            <button
+                              onClick={() => handleDeleteTrade(t.id)}
+                              className="text-rose-400 hover:text-rose-300 transition"
+                              title="Excluir"
+                            >
+                              🗑️
                             </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/80 text-xs text-slate-400">
-              <span>
-                Mostrando página <strong className="text-slate-200">{currentPage}</strong> de <strong className="text-slate-200">{totalPages}</strong> ({filteredTrades.length} registros)
-              </span>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
-                >
-                  Anterior
-                </button>
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
-                >
-                  Próxima
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                📆 Calendário de Desempenho
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Clique em qualquer dia para filtrar e visualizar as operações dele no histórico acima.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                Mês: ${monthlyPnl.toFixed(2)}
-              </span>
-
-              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
-                <button
-                  onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
-                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                >
-                  ◀
-                </button>
-                <span className="text-xs font-bold text-slate-200 px-2 capitalize">
-                  {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
-                </span>
-                <button
-                  onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
-                  className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
-                >
-                  ▶
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 md:gap-2">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-              <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
-                {day}
-              </div>
-            ))}
-
-            {Array.from({ length: startDayOfWeek }).map((_, index) => (
-              <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
-            ))}
-
-            {daysInMonth.map((day) => {
-              const formattedDate = format(day, 'yyyy-MM-dd')
-              const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
-              const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
-              const hasTrades = dayTrades.length > 0
-
-              return (
-                <div
-                  key={formattedDate}
-                  onClick={() => {
-                    setCalendarFilterDate(formattedDate)
-                    setCurrentPage(1)
-                    document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
-                  }}
-                  className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
-                    hasTrades
-                      ? dayPnl > 0
-                        ? 'bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/40'
-                        : dayPnl < 0
-                        ? 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-950/40'
-                        : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80'
-                      : 'bg-slate-950/60 border-slate-800/50 text-slate-600 hover:bg-slate-900/50'
-                  } ${calendarFilterDate === formattedDate ? 'ring-2 ring-emerald-400' : ''}`}
-                >
-                  <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
-
-                  {hasTrades && (
-                    <div className="mt-1">
-                      <span
-                        className={`text-xs md:text-sm font-bold block ${
-                          dayPnl > 0
-                            ? 'text-emerald-400'
-                            : dayPnl < 0
-                            ? 'text-rose-500'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        ${dayPnl.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium block">
-                        {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  )}
                 </div>
-              )
-            })}
+              )}
+
+              {/* Paginação */}
+              {totalPages > 1 && (
+                <div className="flex justify-between items-center pt-4 border-t border-slate-800 text-xs">
+                  <span className="text-slate-400">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          /* Monte Carlo Tab Content */
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              📊 Simulação de Monte Carlo
+            </h2>
+
+            <form onSubmit={runMonteCarloSimulation} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs text-slate-400">Capital Inicial ($)</label>
+                <input
+                  type="number"
+                  value={mcCapital}
+                  onChange={(e) => setMcCapital(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Taxa de Acerto (Win Rate %)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={mcWinRate}
+                  onChange={(e) => setMcWinRate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Risco / Retorno (RRR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={mcRrr}
+                  onChange={(e) => setMcRrr(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Risco por Trade (% do Capital)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={mcRiskPercent}
+                  onChange={(e) => setMcRiskPercent(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Quantidade de Operações</label>
+                <input
+                  type="number"
+                  value={mcIterations}
+                  onChange={(e) => setMcIterations(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400">Curvas a Simular</label>
+                <input
+                  type="number"
+                  value={mcLines}
+                  onChange={(e) => setMcLines(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500 mt-1 font-semibold"
+                />
+              </div>
+
+              <div className="md:col-span-3 flex justify-end">
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition text-sm"
+                >
+                  Rodar Simulação
+                </button>
+              </div>
+            </form>
+
+            {mcResults && (
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-400 uppercase">Maior Drawdown</p>
+                    <p className="text-lg font-bold text-rose-400">{mcResults.maxDrawdown.toFixed(2)}%</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-400 uppercase">Drawdown Médio</p>
+                    <p className="text-lg font-bold text-amber-400">{mcResults.avgDrawdown.toFixed(2)}%</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-400 uppercase">Maior Sequência de Loss</p>
+                    <p className="text-lg font-bold text-rose-400">{mcResults.maxLossStreak} Trades</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <p className="text-[11px] text-slate-400 uppercase">Maior Sequência de Win</p>
+                    <p className="text-lg font-bold text-emerald-400">{mcResults.maxWinStreak} Trades</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </main>
-      )}
     </div>
   )
 }
