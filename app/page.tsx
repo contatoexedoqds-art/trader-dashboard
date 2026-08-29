@@ -253,7 +253,7 @@ export default function Home() {
           }
         } catch (error: any) {
           alert('Erro ao ler arquivo de backup: ' + error.message)
-        } fontally {
+        } finally {
           setLoadingTrades(false)
           e.target.value = ''
         }
