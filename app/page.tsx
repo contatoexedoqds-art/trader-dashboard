@@ -11,21 +11,13 @@ import {
   addMonths,
   subMonths,
   getDay,
-  parseISO,
-  addDays
+  parseISO
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-interface UserProfile {
-  id: string
-  email: string
-  is_admin: boolean
-  access_until: string | null
-}
 
 interface Workspace {
   id: string
@@ -60,12 +52,6 @@ interface Trade {
 export default function Home() {
   const [session, setSession] = useState<any>(null)
   const [loadingSession, setLoadingSession] = useState(true)
-
-  // Perfil e Bloqueio de Usuário
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([])
-  const [showAdminModal, setShowAdminModal] = useState(false)
-  const [loadingAdmin, setLoadingAdmin] = useState(false)
 
   // Navegação de Abas ("dashboard" ou "montecarlo")
   const [activeTab, setActiveTab] = useState<'dashboard' | 'montecarlo'>('dashboard')
@@ -135,87 +121,22 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) fetchUserProfile(session.user.id)
-      else setLoadingSession(false)
+      setLoadingSession(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) fetchUserProfile(session.user.id)
-      else setLoadingSession(false)
+      setLoadingSession(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  async function fetchUserProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (data) {
-      setProfile(data)
-    }
-    setLoadingSession(false)
-  }
-
   useEffect(() => {
-    if (session && isAccessValid()) {
+    if (session) {
       fetchData()
     }
-  }, [session, profile])
-
-  function isAccessValid() {
-    if (!profile) return true
-    if (profile.is_admin) return true
-    if (!profile.access_until) return true
-    return new Date(profile.access_until) > new Date()
-  }
-
-  async function fetchAdminUsers() {
-    setLoadingAdmin(true)
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-    if (data) setAllProfiles(data)
-    setLoadingAdmin(false)
-  }
-
-  async function handleUpdateAccess(userId: string, daysToAdd: number | null) {
-    let newDate: string | null = null
-
-    if (daysToAdd !== null) {
-      const currentAccess = allProfiles.find(p => p.id === userId)?.access_until
-      const baseDate = currentAccess && new Date(currentAccess) > new Date() ? new Date(currentAccess) : new Date()
-      newDate = addDays(baseDate, daysToAdd).toISOString()
-    }
-
-    const { error } = await supabase.from('profiles').update({ access_until: newDate }).eq('id', userId)
-
-    if (!error) {
-      fetchAdminUsers()
-    } else {
-      alert('Erro ao atualizar acesso: ' + error.message)
-    }
-  }
-
-  async function handleExpireAccess(userId: string) {
-    const pastDate = new Date(Date.now() - 86400000).toISOString()
-    const { error } = await supabase.from('profiles').update({ access_until: pastDate }).eq('id', userId)
-    if (!error) fetchAdminUsers()
-    else alert('Erro ao expirar acesso: ' + error.message)
-  }
-
-  async function handleDeleteUser(userId: string) {
-    if (confirm('Tem certeza que deseja excluir esta conta? Esta ação removerá o perfil do usuário.')) {
-      const { error } = await supabase.from('profiles').delete().eq('id', userId)
-      if (!error) {
-        fetchAdminUsers()
-      } else {
-        alert('Erro ao excluir conta: ' + error.message)
-      }
-    }
-  }
+  }, [session])
 
   async function fetchData() {
     setLoadingTrades(true)
@@ -805,40 +726,6 @@ export default function Home() {
     )
   }
 
-  // TELA DE BLOQUEIO CASO A LICENÇA TENHA EXPIRADO
-  if (!isAccessValid()) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans">
-        <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-5">
-          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center mx-auto text-3xl">
-            🔒
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold text-rose-400">Acesso Expirado</h2>
-            <p className="text-xs text-slate-400">
-              O seu período de acesso ao Trader Dashboard encerrou em{' '}
-              <span className="text-slate-200 font-semibold">
-                {profile?.access_until ? format(parseISO(profile.access_until), 'dd/MM/yyyy') : 'data desconhecida'}
-              </span>.
-            </p>
-          </div>
-
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs text-slate-300">
-            Para renovar sua licença ou adquirir mais tempo de uso, entre em contato com o suporte ou administrador.
-          </div>
-
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-lg transition"
-          >
-            Sair da Conta
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   const filteredTrades = trades.filter((t) => {
     const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
     let matchDate = true
@@ -864,6 +751,20 @@ export default function Home() {
   const totalWins = filteredTrades.filter((t) => t.result_type === 'WIN').length
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0'
 
+  const monthStart = startOfMonth(currentCalendarMonth)
+  const monthEnd = endOfMonth(monthStart)
+  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  const startDayOfWeek = getDay(monthStart)
+
+  const monthTrades = trades.filter((t) => {
+    const matchWs = selectedWorkspaceId === 'ALL' || t.workspace_id === selectedWorkspaceId
+    if (!matchWs) return false
+    const d = parseISO(t.trade_date)
+    return isSameMonth(d, currentCalendarMonth)
+  })
+
+  const monthlyPnl = monthTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+
   const strategyStats = Object.values(
     filteredTrades.reduce((acc: any, trade) => {
       const strat = trade.strategy_name || 'Outros / Sem Categoria'
@@ -887,27 +788,10 @@ export default function Home() {
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Usuário: <span className="text-slate-200 font-semibold">{session.user.email}</span>
-            {profile?.access_until && (
-              <span className="ml-2 text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px]">
-                Acesso até: {format(parseISO(profile.access_until), 'dd/MM/yyyy')}
-              </span>
-            )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {profile?.is_admin && (
-            <button
-              onClick={() => {
-                setShowAdminModal(true)
-                fetchAdminUsers()
-              }}
-              className="text-xs bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 font-semibold px-3 py-2 rounded-lg transition"
-            >
-              👑 Gerenciar Licenças
-            </button>
-          )}
-
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1">
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -927,10 +811,11 @@ export default function Home() {
             <button
               onClick={handleExportBackup}
               className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition font-medium"
+              title="Salvar dados em arquivo JSON no computador"
             >
               💾 Salvar Backup
             </button>
-            <label className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition font-medium cursor-pointer">
+            <label className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded transition font-medium cursor-pointer" title="Restaurar dados de um arquivo JSON">
               📂 Restaurar
               <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
             </label>
@@ -963,6 +848,7 @@ export default function Home() {
             <button
               onClick={handleDeleteWorkspace}
               className="text-xs bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 font-semibold px-3 py-2 rounded-lg transition"
+              title="Apagar Workspace Atual"
             >
               🗑️ Apagar Workspace
             </button>
@@ -976,106 +862,6 @@ export default function Home() {
           </button>
         </div>
       </header>
-
-      {/* MODAL ADMIN - GERENCIADOR DE USUÁRIOS E EXPIRAÇÃO */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-3xl w-full space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
-                👑 Painel de Gerenciamento de Usuários (Licenças)
-              </h3>
-              <button
-                onClick={() => setShowAdminModal(false)}
-                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg"
-              >
-                ✕ Fechar
-              </button>
-            </div>
-
-            {loadingAdmin ? (
-              <p className="text-xs text-slate-400 text-center py-8">Carregando usuários...</p>
-            ) : (
-              <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
-                {allProfiles.map((p) => {
-                  const isValid = p.is_admin || (p.access_until && new Date(p.access_until) > new Date())
-                  return (
-                    <div
-                      key={p.id}
-                      className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{p.email}</span>
-                          {p.is_admin && (
-                            <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                              ADMIN
-                            </span>
-                          )}
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              isValid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                            }`}
-                          >
-                            {isValid ? 'ATIVO' : 'BLOQUEADO'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Vencimento:{' '}
-                          <span className="text-slate-200">
-                            {p.access_until
-                              ? format(parseISO(p.access_until), 'dd/MM/yyyy HH:mm')
-                              : 'Sem limite (Vitalício)'}
-                          </span>
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1">
-                        <button
-                          onClick={() => handleUpdateAccess(p.id, 30)}
-                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          +30 Dias
-                        </button>
-                        <button
-                          onClick={() => handleUpdateAccess(p.id, 60)}
-                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          +60 Dias
-                        </button>
-                        <button
-                          onClick={() => handleUpdateAccess(p.id, 90)}
-                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          +90 Dias
-                        </button>
-                        <button
-                          onClick={() => handleUpdateAccess(p.id, null)}
-                          className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          Vitalício
-                        </button>
-                        <button
-                          onClick={() => handleExpireAccess(p.id)}
-                          className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          Expirar Agora
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(p.id)}
-                          className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold px-2.5 py-1.5 rounded text-[11px]"
-                        >
-                          Excluir Conta
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Modal para Visualizar a Imagem do Gráfico */}
       {viewingImageUrl && (
@@ -1109,7 +895,13 @@ export default function Home() {
                 src={viewingImageUrl}
                 alt="Gráfico da Operação"
                 className="max-w-full max-h-[70vh] object-contain rounded"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none'
+                }}
               />
+              <div className="absolute text-center p-6 text-slate-400 text-xs hidden data-[broken=true]:block" data-broken="false">
+                Este link pode ser uma página interativa do TradingView em vez de um arquivo direto de imagem. Clique em &quot;Abrir no Navegador&quot; acima para visualizá-lo perfeitamente.
+              </div>
             </div>
           </div>
         </div>
@@ -1498,6 +1290,10 @@ export default function Home() {
                         <span className="text-slate-300">Média máxima de drawdown</span>
                         <span className="font-bold text-amber-400">{(mcResults.maxDrawdown * 0.85).toFixed(2)}%</span>
                       </div>
+                      <div className="flex justify-between items-center p-4 opacity-0 pointer-events-none md:opacity-100">
+                        <span className="text-slate-500">-</span>
+                        <span className="text-slate-500">-</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1781,42 +1577,39 @@ export default function Home() {
                       <tbody className="divide-y divide-slate-800/50">
                         {paginatedTrades.map((trade) => (
                           <tr key={trade.id} className="hover:bg-slate-800/20 transition group">
-                            <td className="p-3 font-medium text-slate-300">
-                              {format(parseISO(trade.trade_date), 'dd/MM/yyyy')}
+                            <td className="p-3 text-xs">{format(parseISO(trade.trade_date), 'dd/MM/yyyy')}</td>
+                            <td className="p-3 font-bold text-slate-200">
+                              <div className="flex items-center gap-1.5">
+                                <span>{trade.asset}</span>
+                                {trade.chart_url && (
+                                  <button
+                                    onClick={() => setViewingImageUrl(trade.chart_url!)}
+                                    className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded transition font-medium"
+                                    title="Ver Imagem do Gráfico"
+                                  >
+                                    📈 Gráfico
+                                  </button>
+                                )}
+                              </div>
                             </td>
-                            <td className="p-3 font-bold text-white">{trade.asset}</td>
                             <td className="p-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${trade.direction === 'BUY' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${trade.direction === 'BUY' ? 'bg-blue-500/10 text-blue-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                 {trade.direction}
                               </span>
                             </td>
                             <td className="p-3">
-                              <span className={`text-xs font-semibold ${trade.followed_plan === 'FORA' ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Ok'}
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${trade.followed_plan === 'FORA' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                {trade.followed_plan === 'FORA' ? '⚠️ Fora' : '✅ Dentro'}
                               </span>
                             </td>
-                            <td className={`p-3 font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                            <td className={`p-3 font-bold text-xs ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                               ${trade.pnl.toFixed(2)}
                             </td>
-                            <td className="p-3 text-right space-x-2">
-                              {trade.chart_url && (
-                                <button
-                                  onClick={() => setViewingImageUrl(trade.chart_url || null)}
-                                  className="text-xs text-blue-400 hover:underline"
-                                >
-                                  🖼️ Ver
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleEditTrade(trade)}
-                                className="text-xs text-amber-400 hover:underline"
-                              >
+                            <td className="p-3 text-right space-x-1">
+                              <button onClick={() => handleEditTrade(trade)} className="text-[11px] text-blue-400 hover:text-blue-300 bg-blue-400/10 hover:bg-blue-400/20 px-2 py-1 rounded transition">
                                 Editar
                               </button>
-                              <button
-                                onClick={() => handleDeleteTrade(trade.id)}
-                                className="text-xs text-rose-400 hover:underline"
-                              >
+                              <button onClick={() => handleDeleteTrade(trade.id)} className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-400/10 hover:bg-rose-400/20 px-2 py-1 rounded transition">
                                 Excluir
                               </button>
                             </td>
@@ -1826,31 +1619,127 @@ export default function Home() {
                     </table>
                   )}
                 </div>
-
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-slate-800/80 pt-4 mt-4 text-xs text-slate-400">
-                    <span>
-                      Página {currentPage} de {totalPages}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1.5 rounded bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="px-3 py-1.5 rounded bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/80 text-xs text-slate-400">
+                <span>
+                  Mostrando página <strong className="text-slate-200">{currentPage}</strong> de <strong className="text-slate-200">{totalPages}</strong> ({filteredTrades.length} registros)
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-200 font-semibold"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  📆 Calendário de Desempenho
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Clique em qualquer dia para filtrar e visualizar as operações dele no histórico acima.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-bold ${monthlyPnl >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                  Mês: ${monthlyPnl.toFixed(2)}
+                </span>
+
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                  <button
+                    onClick={() => setCurrentCalendarMonth(subMonths(currentCalendarMonth, 1))}
+                    className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                  >
+                    ◀
+                  </button>
+                  <span className="text-xs font-bold text-slate-200 px-2 capitalize">
+                    {format(currentCalendarMonth, 'MMMM yyyy', { locale: ptBR })}
+                  </span>
+                  <button
+                    onClick={() => setCurrentCalendarMonth(addMonths(currentCalendarMonth, 1))}
+                    className="px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 rounded transition"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 md:gap-2">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+                <div key={day} className="text-center text-xs font-bold text-slate-500 py-1 uppercase">
+                  {day}
+                </div>
+              ))}
+
+              {Array.from({ length: startDayOfWeek }).map((_, index) => (
+                <div key={`empty-${index}`} className="min-h-[70px] md:min-h-[85px] bg-slate-950/30 rounded-lg border border-slate-900" />
+              ))}
+
+              {daysInMonth.map((day) => {
+                const formattedDate = format(day, 'yyyy-MM-dd')
+                const dayTrades = monthTrades.filter((t) => t.trade_date === formattedDate)
+                const dayPnl = dayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+                const hasTrades = dayTrades.length > 0
+
+                return (
+                  <div
+                    key={formattedDate}
+                    onClick={() => {
+                      setCalendarFilterDate(formattedDate)
+                      setCurrentPage(1)
+                      document.getElementById('historico-container')?.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                    className={`min-h-[70px] md:min-h-[85px] p-2 rounded-lg border flex flex-col justify-between transition relative cursor-pointer hover:border-emerald-400 ${
+                      hasTrades
+                        ? dayPnl > 0
+                          ? 'bg-emerald-950/20 border-emerald-500/30 hover:bg-emerald-950/40'
+                          : dayPnl < 0
+                          ? 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-950/40'
+                          : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80'
+                        : 'bg-slate-950/60 border-slate-800/50 text-slate-600 hover:bg-slate-900/50'
+                    } ${calendarFilterDate === formattedDate ? 'ring-2 ring-emerald-400' : ''}`}
+                  >
+                    <span className="text-xs font-bold text-slate-400">{format(day, 'd')}</span>
+
+                    {hasTrades && (
+                      <div className="mt-1">
+                        <span
+                          className={`text-xs md:text-sm font-bold block ${
+                            dayPnl > 0
+                              ? 'text-emerald-400'
+                              : dayPnl < 0
+                              ? 'text-rose-500'
+                              : 'text-slate-400'
+                          }`}
+                        >
+                          ${dayPnl.toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium block">
+                          {dayTrades.length} trade{dayTrades.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </main>
